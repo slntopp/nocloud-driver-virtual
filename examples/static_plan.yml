@@ -1,0 +1,25 @@
+title: Pre-Paid Samples
+type: virtual
+public: true
+kind: 2
+resources:
+  - key: post_minute
+    kind: 1
+    price: 1
+    period: 60
+    except: true
+products:
+  minute:
+    kind: 2
+    title: Pre-Paid Minute
+    price: 1
+    period: 60
+    resources:
+      time: 60
+  hour:
+    kind: 2
+    title: Pre-Paid Hour
+    price: 60
+    period: 60
+    resources:
+      time: 3600
