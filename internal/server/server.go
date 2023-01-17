@@ -52,3 +52,38 @@ func (s *VirtualDriver) TestServiceProviderConfig(ctx context.Context, req *pb.T
 
 	return &sppb.TestResponse{Result: true}, nil
 }
+
+func (s *VirtualDriver) TestInstancesGroupConfig(ctx context.Context, req *ipb.TestInstancesGroupConfigRequest) (*ipb.TestInstancesGroupConfigResponse, error) {
+	log := s.log.Named("TestInstancesGroupConfig")
+	log.Debug("Request received", zap.Any("request", req))
+
+	return &ipb.TestInstancesGroupConfigResponse{Result: true}, nil
+}
+
+func (s *VirtualDriver) Up(ctx context.Context, input *pb.UpRequest) (*pb.UpResponse, error) {
+	log := s.log.Named("Up")
+	igroup := input.GetGroup()
+	sp := input.GetServicesProvider()
+	log.Debug("Request received", zap.Any("instances_group", igroup), zap.String("sp", sp.GetUuid()))
+
+	if igroup.GetType() != s.Type {
+		return nil, status.Error(codes.InvalidArgument, "Wrong driver type")
+	}
+
+	s.Monitoring(ctx, &pb.MonitoringRequest{Groups: []*ipb.InstancesGroup{igroup}, ServicesProvider: sp, Scheduled: false})
+
+	log.Debug("Up request completed", zap.Any("instances_group", igroup))
+	return &pb.UpResponse{
+		Group: igroup,
+	}, nil
+}
+
+func (s *VirtualDriver) Down(ctx context.Context, input *pb.DownRequest) (*pb.DownResponse, error) {
+	log := s.log.Named("Down")
+	igroup := input.GetGroup()
+	sp := input.GetServicesProvider()
+	log.Debug("Request received", zap.Any("instances_group", igroup), zap.String("sp", sp.GetUuid()))
+
+	log.Debug("Down request completed", zap.Any("instances_group", igroup))
+	return &pb.DownResponse{Group: igroup}, nil
+}
