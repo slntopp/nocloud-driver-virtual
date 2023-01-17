@@ -18,6 +18,10 @@ package server
 import (
 	"context"
 
+	ipb "github.com/slntopp/nocloud-proto/instances"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	billingpb "github.com/slntopp/nocloud-proto/billing"
 	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
 	sppb "github.com/slntopp/nocloud-proto/services_providers"
@@ -86,4 +90,13 @@ func (s *VirtualDriver) Down(ctx context.Context, input *pb.DownRequest) (*pb.Do
 
 	log.Debug("Down request completed", zap.Any("instances_group", igroup))
 	return &pb.DownResponse{Group: igroup}, nil
+}
+
+func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringRequest) (*pb.MonitoringResponse, error) {
+	log := s.log.Named("Monitoring")
+	sp := req.GetServicesProvider()
+	log.Info("Starting Routine", zap.String("sp", sp.GetUuid()))
+
+	log.Info("Routine Done", zap.String("sp", sp.GetUuid()))
+	return &pb.MonitoringResponse{}, nil
 }
