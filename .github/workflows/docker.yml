@@ -30,7 +30,7 @@ jobs:
         uses: docker/metadata-action@v3.6.1
         with:
           tags: type=raw,value=${{env.IMAGE_TAG}}
-          images: ${{ env.REGISTRY }}/slntopp/nocloud-driver-ione
+          images: ${{ env.REGISTRY }}/slntopp/nocloud-driver-virtual
 
       - name: Log in to the Container registry
         uses: docker/login-action@v1.10.0
