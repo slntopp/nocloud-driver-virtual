@@ -17,18 +17,23 @@ package server
 
 import (
 	"context"
+	"time"
 
+	"github.com/rabbitmq/amqp091-go"
 	ipb "github.com/slntopp/nocloud-proto/instances"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 
-	billingpb "github.com/slntopp/nocloud-proto/billing"
 	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
 	sppb "github.com/slntopp/nocloud-proto/services_providers"
+	stpb "github.com/slntopp/nocloud-proto/states"
+	"github.com/slntopp/nocloud/pkg/instances"
+	"github.com/slntopp/nocloud/pkg/states"
 	"go.uber.org/zap"
-)
 
-type RecordsPublisher func([]*billingpb.Record)
+	"github.com/slntopp/nocloud-driver-virtual/internal/pubsub"
+)
 
 type VirtualDriver struct {
 	pb.UnimplementedDriverServiceServer
@@ -106,6 +111,17 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 	log := s.log.Named("Monitoring")
 	sp := req.GetServicesProvider()
 	log.Info("Starting Routine", zap.String("sp", sp.GetUuid()))
+
+	// Placeholder
+	s.HandlePublishSPState(&stpb.ObjectState{
+		Uuid: sp.GetUuid(),
+		State: &stpb.State{
+			State: stpb.NoCloudState_RUNNING,
+			Meta: map[string]*structpb.Value{
+				"ts": structpb.NewNumberValue(float64(time.Now().Unix())),
+			},
+		},
+	})
 
 	log.Info("Routine Done", zap.String("sp", sp.GetUuid()))
 	return &pb.MonitoringResponse{}, nil
