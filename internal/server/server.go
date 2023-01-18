@@ -112,6 +112,14 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 	sp := req.GetServicesProvider()
 	log.Info("Starting Routine", zap.String("sp", sp.GetUuid()))
 
+	for _, group := range req.GetGroups() {
+		log.Debug("Monitoring Group", zap.String("uuid", group.GetUuid()), zap.String("title", group.GetTitle()), zap.Int("instances", len(group.GetInstances())))
+		for _, i := range group.GetInstances() {
+			log.Debug("Monitoring Instance", zap.String("uuid", i.GetUuid()), zap.String("title", i.GetTitle()))
+			go s._handleInstanceBilling(i)
+		}
+	}
+
 	// Placeholder
 	s.HandlePublishSPState(&stpb.ObjectState{
 		Uuid: sp.GetUuid(),

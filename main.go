@@ -19,24 +19,21 @@ import (
 	"fmt"
 	"net"
 
-	billingpb "github.com/slntopp/nocloud-proto/billing"
-
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/slntopp/nocloud-driver-virtual/internal/server"
 	"github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
 	"github.com/slntopp/nocloud/pkg/nocloud"
 	"github.com/spf13/viper"
-	"github.com/streadway/amqp"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/proto"
 )
 
 var (
 	port     string
 	type_key string
 
-	log          *zap.Logger
-	statesHost   string
+	log *zap.Logger
+
 	RabbitMQConn string
 )
 
@@ -72,38 +69,10 @@ func main() {
 	defer rbmq.Close()
 
 	s := grpc.NewServer()
-	srv := server.NewVirtualDriver(log, type_key)
-	srv.HandlePublishRecords = SetupRecordsPublisher(rbmq)
+	srv := server.NewVirtualDriver(log, rbmq, type_key)
 
 	vanilla.RegisterDriverServiceServer(s, srv)
 
 	log.Info(fmt.Sprintf("Serving gRPC on 0.0.0.0:%v", port))
 	log.Fatal("Failed to serve gRPC", zap.Error(s.Serve(lis)))
-}
-
-func SetupRecordsPublisher(rbmq *amqp.Connection) server.RecordsPublisher {
-	return func(payload []*billingpb.Record) {
-		ch, err := rbmq.Channel()
-		if err != nil {
-			log.Fatal("Failed to open a channel", zap.Error(err))
-		}
-		defer ch.Close()
-
-		queue, _ := ch.QueueDeclare(
-			"records",
-			true, false, false, true, nil,
-		)
-
-		for _, record := range payload {
-			body, err := proto.Marshal(record)
-			if err != nil {
-				log.Error("Error while marshalling record", zap.Error(err))
-				continue
-			}
-			ch.Publish("", queue.Name, false, false, amqp.Publishing{
-				ContentType: "text/plain", Body: body,
-			})
-		}
-
-	}
 }
