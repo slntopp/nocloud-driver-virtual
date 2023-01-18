@@ -35,13 +35,23 @@ type VirtualDriver struct {
 
 	log *zap.Logger
 
-	Type                 string
-	HandlePublishRecords RecordsPublisher
+	Type string
+
+	HandlePublishRecords       pubsub.RecordsPublisher
+	HandlePublishSPState       states.Pub
+	HandlePublishInstanceState states.Pub
+	HandlePublishInstanceData  instances.Pub
 }
 
-func NewVirtualDriver(log *zap.Logger, _type string) *VirtualDriver {
+func NewVirtualDriver(log *zap.Logger, rbmq *amqp091.Connection, _type string) *VirtualDriver {
+
 	return &VirtualDriver{
 		log: log.Named("VirtualDriver").Named(_type), Type: _type,
+
+		HandlePublishRecords:       pubsub.SetupRecordsPublisher(log, rbmq),
+		HandlePublishSPState:       pubsub.SetupSPStatesPublisher(log, rbmq),
+		HandlePublishInstanceState: pubsub.SetupInstancesStatesPublisher(log, rbmq),
+		HandlePublishInstanceData:  pubsub.SetupInstancesDataPublisher(log, rbmq),
 	}
 }
 
