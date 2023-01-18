@@ -1,0 +1,13 @@
+version: "1"
+title: My Services
+instances_groups:
+  - type: virtual
+    title: Tickers
+    instances:
+      - title: 2 Minute a Minute
+        resources:
+          time: 60
+          post_minute: 1
+        billing_plan:
+          uuid: a22c52d9-da79-4823-9bde-70db320d0b53
+        product: minute
