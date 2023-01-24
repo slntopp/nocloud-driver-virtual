@@ -12,7 +12,7 @@ updates:
       time: "06:00"
     reviewers:
       - slntopp
-      - gorobot-nz
+#       - gorobot-nz
     assignees:
       - slntopp
   - package-ecosystem: github-actions
