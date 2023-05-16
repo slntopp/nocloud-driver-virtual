@@ -6,6 +6,8 @@ import (
 
 	"github.com/slntopp/nocloud-proto/billing"
 	"github.com/slntopp/nocloud-proto/instances"
+	statespb "github.com/slntopp/nocloud-proto/states"
+
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -13,6 +15,11 @@ import (
 func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 	log := s.log.Named("BillingHandler").Named(i.GetUuid())
 	log.Debug("Initializing")
+
+	if statespb.NoCloudState_INIT == i.GetState().GetState() {
+		log.Info("Instance state is init. No instance billing", zap.String("uuid", i.GetUuid()))
+		return
+	}
 
 	plan := i.GetBillingPlan()
 	if plan == nil {
