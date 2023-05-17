@@ -19,20 +19,21 @@ import (
 	"context"
 	"time"
 
-	"github.com/rabbitmq/amqp091-go"
+	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
 	ipb "github.com/slntopp/nocloud-proto/instances"
+	sppb "github.com/slntopp/nocloud-proto/services_providers"
+	stpb "github.com/slntopp/nocloud-proto/states"
+
+	i "github.com/slntopp/nocloud/pkg/instances"
+	"github.com/slntopp/nocloud/pkg/states"
+
+	"github.com/slntopp/nocloud-driver-virtual/internal/pubsub"
+
+	"github.com/rabbitmq/amqp091-go"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
-
-	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
-	sppb "github.com/slntopp/nocloud-proto/services_providers"
-	stpb "github.com/slntopp/nocloud-proto/states"
-	"github.com/slntopp/nocloud/pkg/instances"
-	"github.com/slntopp/nocloud/pkg/states"
-	"go.uber.org/zap"
-
-	"github.com/slntopp/nocloud-driver-virtual/internal/pubsub"
 )
 
 type VirtualDriver struct {
@@ -45,7 +46,7 @@ type VirtualDriver struct {
 	HandlePublishRecords       pubsub.RecordsPublisher
 	HandlePublishSPState       states.Pub
 	HandlePublishInstanceState states.Pub
-	HandlePublishInstanceData  instances.Pub
+	HandlePublishInstanceData  i.Pub
 }
 
 func NewVirtualDriver(log *zap.Logger, rbmq *amqp091.Connection, _type string) *VirtualDriver {
@@ -87,6 +88,21 @@ func (s *VirtualDriver) Up(ctx context.Context, input *pb.UpRequest) (*pb.UpResp
 
 	if igroup.GetType() != s.Type {
 		return nil, status.Error(codes.InvalidArgument, "Wrong driver type")
+	}
+
+	secrets := sp.GetSecrets()
+
+	if secrets != nil {
+		autoActivation := secrets["auto_activation"].GetBoolValue()
+		if autoActivation {
+			for _, inst := range igroup.GetInstances() {
+				inst.State.State = stpb.NoCloudState_RUNNING
+				go s.HandlePublishInstanceState(&stpb.ObjectState{
+					Uuid:  inst.GetUuid(),
+					State: inst.GetState(),
+				})
+			}
+		}
 	}
 
 	s.Monitoring(ctx, &pb.MonitoringRequest{Groups: []*ipb.InstancesGroup{igroup}, ServicesProvider: sp, Scheduled: false})

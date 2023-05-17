@@ -3,7 +3,9 @@ package actions
 import (
 	ipb "github.com/slntopp/nocloud-proto/instances"
 	stpb "github.com/slntopp/nocloud-proto/states"
+
 	"github.com/slntopp/nocloud/pkg/states"
+
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
