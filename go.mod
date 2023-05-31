@@ -6,7 +6,7 @@ require (
 	github.com/rabbitmq/amqp091-go v1.8.1
 	github.com/slntopp/nocloud v0.0.18-0.20230505113930-1bf270648b5e
 	github.com/slntopp/nocloud-proto v0.0.0-20230511191237-f0872635b921
-	github.com/spf13/viper v1.15.0
+	github.com/spf13/viper v1.16.0
 	go.uber.org/zap v1.24.0
 	google.golang.org/grpc v1.55.0
 	google.golang.org/protobuf v1.30.0
@@ -22,7 +22,7 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
-	github.com/pelletier/go-toml/v2 v2.0.7 // indirect
+	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/spf13/afero v1.9.5 // indirect
 	github.com/spf13/cast v1.5.1 // indirect
