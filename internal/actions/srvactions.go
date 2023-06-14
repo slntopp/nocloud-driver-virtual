@@ -10,7 +10,7 @@ import (
 type ServiceAction func(states.Pub, *ipb.Instance, map[string]*structpb.Value) (*ipb.InvokeResponse, error)
 
 var SrvActions = map[string]ServiceAction{
-	"change_status": ChangeState,
+	"change_state": ChangeState,
 }
 
 func ChangeState(pub states.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
