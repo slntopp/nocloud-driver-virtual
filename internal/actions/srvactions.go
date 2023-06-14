@@ -17,6 +17,10 @@ func ChangeState(pub states.Pub, inst *ipb.Instance, data map[string]*structpb.V
 	state := int32(data["state"].GetNumberValue())
 	statepb := stpb.NoCloudState(state)
 
+	if inst.State == nil {
+		inst.State = &stpb.State{}
+	}
+
 	inst.State.State = statepb
 
 	go pub(&stpb.ObjectState{
