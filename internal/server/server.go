@@ -120,6 +120,10 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 		for _, i := range group.GetInstances() {
 			log.Debug("Monitoring Instance", zap.String("uuid", i.GetUuid()), zap.String("title", i.GetTitle()))
 
+			if i.GetData() == nil {
+				i.Data = make(map[string]*structpb.Value)
+			}
+
 			_, ok := i.GetData()["creation"]
 
 			if !ok {
