@@ -17,18 +17,19 @@ package server
 
 import (
 	"context"
+	eventpb "github.com/slntopp/nocloud-proto/events"
+	"github.com/slntopp/nocloud/pkg/instances"
 	"time"
 
 	"github.com/rabbitmq/amqp091-go"
-	ipb "github.com/slntopp/nocloud-proto/instances"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
+	ipb "github.com/slntopp/nocloud-proto/instances"
 	sppb "github.com/slntopp/nocloud-proto/services_providers"
 	stpb "github.com/slntopp/nocloud-proto/states"
-	"github.com/slntopp/nocloud/pkg/instances"
 	"github.com/slntopp/nocloud/pkg/states"
 	"go.uber.org/zap"
 
@@ -43,6 +44,7 @@ type VirtualDriver struct {
 	Type string
 
 	HandlePublishRecords       pubsub.RecordsPublisher
+	HandlePublishEvent         pubsub.EventPublisher
 	HandlePublishSPState       states.Pub
 	HandlePublishInstanceState states.Pub
 	HandlePublishInstanceData  instances.Pub
@@ -57,6 +59,7 @@ func NewVirtualDriver(log *zap.Logger, rbmq *amqp091.Connection, _type string) *
 		HandlePublishSPState:       pubsub.SetupSPStatesPublisher(log, rbmq),
 		HandlePublishInstanceState: pubsub.SetupInstancesStatesPublisher(log, rbmq),
 		HandlePublishInstanceData:  pubsub.SetupInstancesDataPublisher(log, rbmq),
+		HandlePublishEvent:         pubsub.SetupEventsPublisher(log, rbmq),
 	}
 }
 
@@ -116,6 +119,23 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 		log.Debug("Monitoring Group", zap.String("uuid", group.GetUuid()), zap.String("title", group.GetTitle()), zap.Int("instances", len(group.GetInstances())))
 		for _, i := range group.GetInstances() {
 			log.Debug("Monitoring Instance", zap.String("uuid", i.GetUuid()), zap.String("title", i.GetTitle()))
+
+			_, ok := i.GetData()["creation"]
+
+			if !ok {
+				i.Data["creation"] = structpb.NewStringValue(time.Now().Format("2006-01-02"))
+				s.HandlePublishEvent(&eventpb.Event{
+					Uuid: i.GetUuid(),
+					Key:  "instance_created",
+					Data: map[string]*structpb.Value{
+						"type": structpb.NewStringValue("virtual"),
+					},
+				})
+				s.HandlePublishInstanceData(&ipb.ObjectData{
+					Uuid: i.GetUuid(), Data: i.GetData(),
+				})
+			}
+
 			go s._handleInstanceBilling(i)
 		}
 	}
