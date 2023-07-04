@@ -12,12 +12,16 @@ import (
 type ServiceAction func(states.Pub, *ipb.Instance, map[string]*structpb.Value) (*ipb.InvokeResponse, error)
 
 var SrvActions = map[string]ServiceAction{
-	"change_status": ChangeState,
+	"change_state": ChangeState,
 }
 
 func ChangeState(pub states.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
 	state := int32(data["state"].GetNumberValue())
 	statepb := stpb.NoCloudState(state)
+
+	if inst.State == nil {
+		inst.State = &stpb.State{}
+	}
 
 	inst.State.State = statepb
 

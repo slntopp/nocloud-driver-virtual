@@ -17,6 +17,7 @@ package server
 
 import (
 	"context"
+	eventpb "github.com/slntopp/nocloud-proto/events"
 	"time"
 
 	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
@@ -44,6 +45,7 @@ type VirtualDriver struct {
 	Type string
 
 	HandlePublishRecords       pubsub.RecordsPublisher
+	HandlePublishEvent         pubsub.EventPublisher
 	HandlePublishSPState       states.Pub
 	HandlePublishInstanceState states.Pub
 	HandlePublishInstanceData  i.Pub
@@ -58,6 +60,7 @@ func NewVirtualDriver(log *zap.Logger, rbmq *amqp091.Connection, _type string) *
 		HandlePublishSPState:       pubsub.SetupSPStatesPublisher(log, rbmq),
 		HandlePublishInstanceState: pubsub.SetupInstancesStatesPublisher(log, rbmq),
 		HandlePublishInstanceData:  pubsub.SetupInstancesDataPublisher(log, rbmq),
+		HandlePublishEvent:         pubsub.SetupEventsPublisher(log, rbmq),
 	}
 }
 
@@ -132,6 +135,27 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 		log.Debug("Monitoring Group", zap.String("uuid", group.GetUuid()), zap.String("title", group.GetTitle()), zap.Int("instances", len(group.GetInstances())))
 		for _, i := range group.GetInstances() {
 			log.Debug("Monitoring Instance", zap.String("uuid", i.GetUuid()), zap.String("title", i.GetTitle()))
+
+			if i.GetData() == nil {
+				i.Data = make(map[string]*structpb.Value)
+			}
+
+			_, ok := i.GetData()["creation"]
+
+			if !ok {
+				i.Data["creation"] = structpb.NewStringValue(time.Now().Format("2006-01-02"))
+				s.HandlePublishEvent(&eventpb.Event{
+					Uuid: i.GetUuid(),
+					Key:  "instance_created",
+					Data: map[string]*structpb.Value{
+						"type": structpb.NewStringValue("virtual"),
+					},
+				})
+				s.HandlePublishInstanceData(&ipb.ObjectData{
+					Uuid: i.GetUuid(), Data: i.GetData(),
+				})
+			}
+
 			go s._handleInstanceBilling(i)
 		}
 	}
