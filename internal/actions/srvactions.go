@@ -25,10 +25,14 @@ func ChangeState(pub states.Pub, inst *ipb.Instance, data map[string]*structpb.V
 
 	inst.State.State = statepb
 
-	go pub(&stpb.ObjectState{
+	_, err := pub(&stpb.ObjectState{
 		Uuid:  inst.GetUuid(),
 		State: inst.GetState(),
 	})
+
+	if err != nil {
+		return nil, err
+	}
 
 	return &ipb.InvokeResponse{
 		Result: true,
