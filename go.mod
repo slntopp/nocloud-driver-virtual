@@ -7,7 +7,7 @@ require (
 	github.com/slntopp/nocloud v0.0.18-0.20230621151446-21c5553c856c
 	github.com/slntopp/nocloud-proto v0.0.0-20230703102215-5cf87b8da605
 	github.com/spf13/viper v1.16.0
-	go.uber.org/zap v1.24.0
+	go.uber.org/zap v1.25.0
 	google.golang.org/grpc v1.57.0
 	google.golang.org/protobuf v1.31.0
 )
@@ -30,7 +30,6 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.4.2 // indirect
 	github.com/wI2L/jsondiff v0.4.0 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.10.0 // indirect
 	golang.org/x/net v0.11.0 // indirect
