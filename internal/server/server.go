@@ -140,7 +140,7 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 
 			if i.GetState() == nil {
 				i.State = &stpb.State{
-					State: stpb.NoCloudState_OPERATION,
+					State: stpb.NoCloudState_PENDING,
 				}
 
 				go s.HandlePublishInstanceState(&stpb.ObjectState{
