@@ -49,6 +49,13 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 			records = append(records, new...)
 			i.Data["last_monitoring"] = structpb.NewNumberValue(float64(last))
 		}
+
+		product := i.GetBillingPlan().GetProducts()[i.GetProduct()]
+		if product.GetKind() == billing.Kind_POSTPAID {
+			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(last + product.GetPeriod()))
+		} else {
+			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(last))
+		}
 	}
 
 	log.Debug("Resulting billing", zap.Any("records", records))
