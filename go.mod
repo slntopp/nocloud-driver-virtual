@@ -8,7 +8,7 @@ require (
 	github.com/slntopp/nocloud-proto v0.0.0-20230904195054-4f2d1760c6b8
 	github.com/spf13/viper v1.17.0
 	go.uber.org/zap v1.26.0
-	google.golang.org/grpc v1.58.2
+	google.golang.org/grpc v1.58.3
 	google.golang.org/protobuf v1.31.0
 )
 
