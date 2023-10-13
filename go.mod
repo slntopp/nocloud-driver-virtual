@@ -4,8 +4,8 @@ go 1.19
 
 require (
 	github.com/rabbitmq/amqp091-go v1.9.0
-	github.com/slntopp/nocloud v0.0.18-0.20230904195140-0e2e430146cb
-	github.com/slntopp/nocloud-proto v0.0.0-20230904195054-4f2d1760c6b8
+	github.com/slntopp/nocloud v0.0.18
+	github.com/slntopp/nocloud-proto v0.0.0-20230928084001-11a2827103dc
 	github.com/spf13/viper v1.17.0
 	go.uber.org/zap v1.26.0
 	google.golang.org/grpc v1.58.3
@@ -18,7 +18,7 @@ require (
 	github.com/cskr/pubsub v1.0.2 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.17.1 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
@@ -33,10 +33,10 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/wI2L/jsondiff v0.4.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.13.0 // indirect
+	golang.org/x/crypto v0.14.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
-	golang.org/x/net v0.15.0 // indirect
-	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/net v0.17.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
 	golang.org/x/text v0.13.0 // indirect
 	google.golang.org/genproto v0.0.0-20230913181813-007df8e322eb // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230913181813-007df8e322eb // indirect
