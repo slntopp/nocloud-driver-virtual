@@ -30,5 +30,5 @@ func (s *VirtualDriver) Invoke(ctx context.Context, req *pb.InvokeRequest) (*ipb
 		return nil, status.Errorf(codes.NotFound, "Action %s not declared for %s", method, s.Type)
 	}
 
-	return actions(s.HandlePublishInstanceState, instance, req.GetParams())
+	return actions(s.HandlePublishInstanceState, s.HandlePublishInstanceData, instance, req.GetParams())
 }
