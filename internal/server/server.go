@@ -138,19 +138,34 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 		for _, i := range group.GetInstances() {
 			log.Debug("Monitoring Instance", zap.String("uuid", i.GetUuid()), zap.String("title", i.GetTitle()))
 
+			if i.GetData() == nil {
+				i.Data = make(map[string]*structpb.Value)
+			}
+
 			if i.GetState() == nil {
-				i.State = &stpb.State{
-					State: stpb.NoCloudState_PENDING,
+				bpMeta := i.GetBillingPlan().GetMeta()
+
+				autoStart := bpMeta["auto_start"].GetBoolValue()
+
+				if autoStart {
+					i.State = &stpb.State{
+						State: stpb.NoCloudState_RUNNING,
+					}
+					i.Data["start"] = structpb.NewStringValue(time.Now().Format("2006-01-02"))
+					s.HandlePublishInstanceData(&ipb.ObjectData{
+						Uuid: i.GetUuid(),
+						Data: i.GetData(),
+					})
+				} else {
+					i.State = &stpb.State{
+						State: stpb.NoCloudState_PENDING,
+					}
 				}
 
 				go s.HandlePublishInstanceState(&stpb.ObjectState{
 					Uuid:  i.GetUuid(),
 					State: i.GetState(),
 				})
-			}
-
-			if i.GetData() == nil {
-				i.Data = make(map[string]*structpb.Value)
 			}
 
 			_, ok := i.GetData()["creation"]

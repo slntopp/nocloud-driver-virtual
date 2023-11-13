@@ -34,10 +34,10 @@ func ChangeState(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data m
 
 	iData := inst.GetData()
 
-	_, ok := iData["start_date"]
+	_, ok := iData["start"]
 
 	if statepb == stpb.NoCloudState_RUNNING && !ok {
-		iData["start_date"] = structpb.NewNumberValue(float64(time.Now().Unix()))
+		iData["start"] = structpb.NewStringValue(time.Now().Format("2006-01-02"))
 		iPub(&ipb.ObjectData{
 			Uuid: inst.GetUuid(),
 			Data: iData,
