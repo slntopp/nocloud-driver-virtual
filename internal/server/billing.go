@@ -16,7 +16,7 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 	log := s.log.Named("BillingHandler").Named(i.GetUuid())
 	log.Debug("Initializing")
 
-	if statespb.NoCloudState_INIT == i.GetState().GetState() {
+	if statespb.NoCloudState_PENDING == i.GetState().GetState() {
 		log.Info("Instance state is init. No instance billing", zap.String("uuid", i.GetUuid()))
 		return
 	}
