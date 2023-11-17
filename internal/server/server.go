@@ -24,6 +24,7 @@ import (
 	ipb "github.com/slntopp/nocloud-proto/instances"
 	sppb "github.com/slntopp/nocloud-proto/services_providers"
 	stpb "github.com/slntopp/nocloud-proto/states"
+	sttspb "github.com/slntopp/nocloud-proto/statuses"
 
 	i "github.com/slntopp/nocloud/pkg/instances"
 	"github.com/slntopp/nocloud/pkg/states"
@@ -166,6 +167,17 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 					Uuid:  i.GetUuid(),
 					State: i.GetState(),
 				})
+			}
+
+			if i.GetStatus() == sttspb.NoCloudStatus_DEL {
+				if i.GetState().GetState() != stpb.NoCloudState_DELETED {
+					i.State.State = stpb.NoCloudState_DELETED
+					s.HandlePublishInstanceState(&stpb.ObjectState{
+						Uuid:  i.GetUuid(),
+						State: i.GetState(),
+					})
+				}
+				continue
 			}
 
 			_, ok := i.GetData()["creation"]
