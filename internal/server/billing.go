@@ -2,6 +2,7 @@ package server
 
 import (
 	"math"
+	"slices"
 	"time"
 
 	"github.com/slntopp/nocloud-proto/billing"
@@ -56,6 +57,39 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 		} else {
 			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(last))
 		}
+
+		var configAddons, productAddons []any
+		config := i.GetConfig()
+		if config != nil {
+			configAddons = config["addons"].GetListValue().AsSlice()
+		}
+
+		meta := product.GetMeta()
+		if meta != nil {
+			productAddons = meta["addons"].GetListValue().AsSlice()
+		}
+
+		for _, resource := range plan.Resources {
+			var key any = resource.GetKey()
+			if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
+				if _, ok := i.Data[resource.GetKey()+"_last_monitoring"]; ok {
+					last = int64(i.Data[resource.GetKey()+"_last_monitoring"].GetNumberValue())
+				} else {
+					last = time.Now().Unix()
+				}
+				recs, last := handleCapacityBilling(log, i, resource, last)
+				if len(recs) != 0 {
+					records = append(records, recs...)
+					i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
+				}
+
+				if resource.GetKind() == billing.Kind_POSTPAID {
+					i.Data[resource.GetKey()+"_next_payment_date"] = structpb.NewNumberValue(float64(last + resource.GetPeriod()))
+				} else {
+					i.Data[resource.GetKey()+"_next_payment_date"] = structpb.NewNumberValue(float64(last))
+				}
+			}
+		}
 	}
 
 	log.Debug("Resulting billing", zap.Any("records", records))
@@ -95,6 +129,36 @@ func handleStaticBilling(log *zap.Logger, i *instances.Instance, last int64, pri
 				Start:    last, End: end, Exec: last,
 				Priority: priority,
 				Total:    math.Round(product.Price*100) / 100.0,
+			})
+			last = end
+		}
+	}
+
+	return records, last
+}
+
+func handleCapacityBilling(log *zap.Logger, i *instances.Instance, res *billing.ResourceConf, last int64) ([]*billing.Record, int64) {
+	var records []*billing.Record
+
+	if res.Kind == billing.Kind_POSTPAID {
+		for end := last + res.Period; end <= time.Now().Unix(); end += res.Period {
+			records = append(records, &billing.Record{
+				Resource: res.Key,
+				Instance: i.GetUuid(),
+				Start:    last, End: end,
+				Exec:  last,
+				Total: res.GetPrice(),
+			})
+			last = end
+		}
+	} else {
+		for end := last + res.Period; last <= time.Now().Unix(); end += res.Period {
+			records = append(records, &billing.Record{
+				Resource: res.Key,
+				Instance: i.GetUuid(),
+				Priority: billing.Priority_URGENT,
+				Start:    last, End: end, Exec: last,
+				Total: res.GetPrice(),
 			})
 			last = end
 		}
