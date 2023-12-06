@@ -24,11 +24,18 @@ func (s *VirtualDriver) Invoke(ctx context.Context, req *pb.InvokeRequest) (*ipb
 		return nil, status.Errorf(codes.PermissionDenied, "Action %s is admin action", method)
 	}
 
-	actions, ok := actions.SrvActions[method]
+	action, ok := actions.SrvActions[method]
 
 	if !ok {
-		return nil, status.Errorf(codes.NotFound, "Action %s not declared for %s", method, s.Type)
-	}
+		_, ok = actions.BillingActions[method]
+		if !ok {
+			return nil, status.Errorf(codes.PermissionDenied, "Action %s is admin action", method)
+		}
 
-	return actions(s.HandlePublishInstanceState, s.HandlePublishInstanceData, instance, req.GetParams())
+		go s._handleRenewBilling(instance)
+
+		return &ipb.InvokeResponse{Result: true}, nil
+	} else {
+		return action(s.HandlePublishInstanceState, s.HandlePublishInstanceData, instance, req.GetParams())
+	}
 }

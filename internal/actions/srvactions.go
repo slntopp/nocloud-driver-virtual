@@ -1,8 +1,12 @@
 package actions
 
 import (
+	billingpb "github.com/slntopp/nocloud-proto/billing"
 	ipb "github.com/slntopp/nocloud-proto/instances"
 	stpb "github.com/slntopp/nocloud-proto/states"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"slices"
 	"time"
 
 	"github.com/slntopp/nocloud/pkg/instances"
@@ -15,6 +19,10 @@ type ServiceAction func(states.Pub, instances.Pub, *ipb.Instance, map[string]*st
 
 var SrvActions = map[string]ServiceAction{
 	"change_state": ChangeState,
+}
+
+var BillingActions = map[string]ServiceAction{
+	"manual_renew": ManualRenew,
 }
 
 func ChangeState(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
@@ -51,4 +59,54 @@ func ChangeState(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data m
 	return &ipb.InvokeResponse{
 		Result: true,
 	}, nil
+}
+
+func ManualRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+	instData := inst.GetData()
+	instProduct := inst.GetProduct()
+	billingPlan := inst.GetBillingPlan()
+
+	kind := billingPlan.GetKind()
+	if kind != billingpb.PlanKind_STATIC {
+		return &ipb.InvokeResponse{Result: false}, status.Error(codes.Internal, "Not implemented for dynamic plan")
+	}
+
+	lastMonitoring, ok := instData["last_monitoring"]
+	if !ok {
+		return &ipb.InvokeResponse{Result: false}, status.Error(codes.Internal, "No last_monitoring data")
+	}
+	lastMonitoringValue := int64(lastMonitoring.GetNumberValue())
+
+	period := billingPlan.GetProducts()[instProduct].GetPeriod()
+
+	lastMonitoringValue += period
+	instData["last_monitoring"] = structpb.NewNumberValue(float64(lastMonitoringValue))
+
+	var configAddons, productAddons []any
+	config := inst.GetConfig()
+	if config != nil {
+		configAddons = config["addons"].GetListValue().AsSlice()
+	}
+
+	meta := billingPlan.GetProducts()[instProduct].GetMeta()
+	if meta != nil {
+		productAddons = meta["addons"].GetListValue().AsSlice()
+	}
+
+	for _, resource := range billingPlan.Resources {
+		var key any = resource.GetKey()
+		if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
+			if lm, ok := instData[resource.GetKey()+"_last_monitoring"]; ok {
+				lmVal := lm.GetNumberValue()
+				lmVal += float64(resource.GetPeriod())
+				instData[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(lmVal)
+			}
+		}
+	}
+
+	iPub(&ipb.ObjectData{
+		Uuid: inst.GetUuid(),
+		Data: instData,
+	})
+	return &ipb.InvokeResponse{Result: true}, nil
 }

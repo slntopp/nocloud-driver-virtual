@@ -282,6 +282,72 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 	}
 }
 
+func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
+	instData := inst.GetData()
+	instProduct := inst.GetProduct()
+	billingPlan := inst.GetBillingPlan()
+
+	product := billingPlan.GetProducts()[instProduct]
+
+	lastMonitoring, ok := instData["last_monitoring"]
+	if !ok {
+		return
+	}
+	lastMonitoringValue := int64(lastMonitoring.GetNumberValue())
+
+	var records []*billing.Record
+
+	records = append(records, &billing.Record{
+		Start:    lastMonitoringValue,
+		End:      lastMonitoringValue + product.GetPeriod(),
+		Exec:     time.Now().Unix(),
+		Priority: billing.Priority_URGENT,
+		Instance: inst.GetUuid(),
+		Product:  inst.GetProduct(),
+		Total:    product.GetPrice(),
+	})
+	lastMonitoringValue += product.GetPeriod()
+	instData["last_monitoring"] = structpb.NewNumberValue(float64(lastMonitoringValue))
+
+	var configAddons, productAddons []any
+	config := inst.GetConfig()
+	if config != nil {
+		configAddons = config["addons"].GetListValue().AsSlice()
+	}
+
+	meta := billingPlan.GetProducts()[instProduct].GetMeta()
+	if meta != nil {
+		productAddons = meta["addons"].GetListValue().AsSlice()
+	}
+
+	for _, resource := range billingPlan.Resources {
+		var key any = resource.GetKey()
+		if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
+			if lm, ok := instData[resource.GetKey()+"_last_monitoring"]; ok {
+				lmVal := lm.GetNumberValue()
+
+				records = append(records, &billing.Record{
+					Start:    int64(lmVal),
+					End:      int64(lmVal) + product.GetPeriod(),
+					Exec:     time.Now().Unix(),
+					Priority: billing.Priority_URGENT,
+					Instance: inst.GetUuid(),
+					Resource: resource.GetKey(),
+					Total:    resource.GetPrice(),
+				})
+
+				lmVal += float64(resource.GetPeriod())
+				instData[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(lmVal)
+			}
+		}
+	}
+
+	s.HandlePublishInstanceData(&instances.ObjectData{
+		Uuid: inst.GetUuid(),
+		Data: instData,
+	})
+}
+
 func handleOneTimePayment(log *zap.Logger, i *instances.Instance, last int64, priority billing.Priority) []*billing.Record {
 	log.Debug("Handling Static Billing", zap.Int64("last", last))
 	product, ok := i.BillingPlan.Products[*i.Product]
