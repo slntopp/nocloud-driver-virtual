@@ -290,6 +290,8 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
 
 	product := billingPlan.GetProducts()[instProduct]
 
+	log.Debug("Product", zap.Any("pr", instProduct), zap.Any("Product", product))
+
 	log.Debug("Init data", zap.Any("data", instData))
 
 	lastMonitoring, ok := instData["last_monitoring"]
@@ -301,6 +303,7 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
 
 	var records []*billing.Record
 
+	log.Debug("lm", zap.Any("before", lastMonitoringValue))
 	records = append(records, &billing.Record{
 		Start:    lastMonitoringValue,
 		End:      lastMonitoringValue + product.GetPeriod(),
@@ -311,6 +314,7 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
 		Total:    product.GetPrice(),
 	})
 	lastMonitoringValue += product.GetPeriod()
+	log.Debug("lm", zap.Any("after", lastMonitoringValue))
 	instData["last_monitoring"] = structpb.NewNumberValue(float64(lastMonitoringValue))
 
 	var configAddons, productAddons []any
@@ -329,7 +333,7 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
 		if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
 			if lm, ok := instData[resource.GetKey()+"_last_monitoring"]; ok {
 				lmVal := lm.GetNumberValue()
-
+				log.Debug("lm", zap.Any("before", lmVal))
 				records = append(records, &billing.Record{
 					Start:    int64(lmVal),
 					End:      int64(lmVal) + product.GetPeriod(),
@@ -339,14 +343,15 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
 					Resource: resource.GetKey(),
 					Total:    resource.GetPrice(),
 				})
-
 				lmVal += float64(resource.GetPeriod())
+				log.Debug("lm", zap.Any("before", lmVal))
 				instData[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(lmVal)
 			}
 		}
 	}
 
 	log.Debug("Final data", zap.Any("data", instData))
+	log.Debug("records", zap.Any("recs", records))
 
 	s.HandlePublishRecords(records)
 
