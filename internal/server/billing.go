@@ -283,14 +283,18 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 }
 
 func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
+	log := s.log.Named("Manual renew")
 	instData := inst.GetData()
 	instProduct := inst.GetProduct()
 	billingPlan := inst.GetBillingPlan()
 
 	product := billingPlan.GetProducts()[instProduct]
 
+	log.Debug("Init data", zap.Any("data", instData))
+
 	lastMonitoring, ok := instData["last_monitoring"]
 	if !ok {
+		log.Error("No last monitoring")
 		return
 	}
 	lastMonitoringValue := int64(lastMonitoring.GetNumberValue())
@@ -341,6 +345,10 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
 			}
 		}
 	}
+
+	log.Debug("Final data", zap.Any("data", instData))
+
+	s.HandlePublishRecords(records)
 
 	s.HandlePublishInstanceData(&instances.ObjectData{
 		Uuid: inst.GetUuid(),
