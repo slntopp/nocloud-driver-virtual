@@ -196,7 +196,18 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 				})
 			}
 
-			go s._handleInstanceBilling(i)
+			instConfig := i.GetConfig()
+			regularPayment := true
+
+			if instConfig != nil {
+				regularPayment = instConfig["regular_payment"].GetBoolValue()
+			}
+
+			if regularPayment {
+				go s._handleInstanceBilling(i)
+			} else {
+				go s._handleNonRegularBilling(i)
+			}
 		}
 	}
 
