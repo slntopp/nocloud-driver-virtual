@@ -36,8 +36,45 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 	var records []*billing.Record
 
 	if plan.Kind == billing.PlanKind_STATIC {
+		product := i.GetBillingPlan().GetProducts()[i.GetProduct()]
+
 		var last int64
 		var priority billing.Priority
+
+		var configAddons, productAddons []any
+		config := i.GetConfig()
+		if config != nil {
+			configAddons = config["addons"].GetListValue().AsSlice()
+		}
+
+		meta := product.GetMeta()
+		if meta != nil {
+			productAddons = meta["addons"].GetListValue().AsSlice()
+		}
+
+		for _, resource := range plan.Resources {
+			var key any = resource.GetKey()
+			if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
+				_, ok := i.Data[resource.GetKey()+"_last_monitoring"]
+
+				if ok {
+					last = int64(i.Data[resource.GetKey()+"_last_monitoring"].GetNumberValue())
+				} else {
+					last = time.Now().Unix()
+				}
+
+				if resource.GetPeriod() == 0 {
+					if !ok {
+						records = append(records, handleOneTimeResourcePayment(log, i, resource, last)...)
+						i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
+					} else {
+						capRec, last := handleCapacityBilling(log, i, resource, last)
+						records = append(records, capRec...)
+						i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
+					}
+				}
+			}
+		}
 
 		_, ok := i.Data["last_monitoring"]
 
@@ -49,37 +86,10 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 			priority = billing.Priority_URGENT
 		}
 
-		product := i.GetBillingPlan().GetProducts()[i.GetProduct()]
-
 		if product.GetPeriod() == 0 {
 			if !ok {
 				records = append(records, handleOneTimePayment(log, i, last, priority)...)
 				i.Data["last_monitoring"] = structpb.NewNumberValue(float64(last))
-
-				var configAddons, productAddons []any
-				config := i.GetConfig()
-				if config != nil {
-					configAddons = config["addons"].GetListValue().AsSlice()
-				}
-
-				meta := product.GetMeta()
-				if meta != nil {
-					productAddons = meta["addons"].GetListValue().AsSlice()
-				}
-
-				for _, resource := range plan.Resources {
-					var key any = resource.GetKey()
-					if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
-						if _, ok := i.Data[resource.GetKey()+"_last_monitoring"]; ok {
-							last = int64(i.Data[resource.GetKey()+"_last_monitoring"].GetNumberValue())
-						} else {
-							last = time.Now().Unix()
-						}
-
-						records = append(records, handleOneTimeResourcePayment(log, i, resource, last)...)
-						i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
-					}
-				}
 			}
 		} else {
 			new, last := handleStaticBilling(log, i, last, priority)
@@ -92,39 +102,6 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 				i.Data["next_payment_date"] = structpb.NewNumberValue(float64(last + product.GetPeriod()))
 			} else {
 				i.Data["next_payment_date"] = structpb.NewNumberValue(float64(last))
-			}
-
-			var configAddons, productAddons []any
-			config := i.GetConfig()
-			if config != nil {
-				configAddons = config["addons"].GetListValue().AsSlice()
-			}
-
-			meta := product.GetMeta()
-			if meta != nil {
-				productAddons = meta["addons"].GetListValue().AsSlice()
-			}
-
-			for _, resource := range plan.Resources {
-				var key any = resource.GetKey()
-				if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
-					if _, ok := i.Data[resource.GetKey()+"_last_monitoring"]; ok {
-						last = int64(i.Data[resource.GetKey()+"_last_monitoring"].GetNumberValue())
-					} else {
-						last = time.Now().Unix()
-					}
-					recs, last := handleCapacityBilling(log, i, resource, last)
-					if len(recs) != 0 {
-						records = append(records, recs...)
-						i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
-					}
-
-					if resource.GetKind() == billing.Kind_POSTPAID {
-						i.Data[resource.GetKey()+"_next_payment_date"] = structpb.NewNumberValue(float64(last + resource.GetPeriod()))
-					} else {
-						i.Data[resource.GetKey()+"_next_payment_date"] = structpb.NewNumberValue(float64(last))
-					}
-				}
 			}
 		}
 	}
@@ -181,8 +158,45 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 		var records []*billing.Record
 
 		if plan.Kind == billing.PlanKind_STATIC {
+			product := i.GetBillingPlan().GetProducts()[i.GetProduct()]
+
 			var last int64
 			var priority billing.Priority
+
+			var configAddons, productAddons []any
+			config := i.GetConfig()
+			if config != nil {
+				configAddons = config["addons"].GetListValue().AsSlice()
+			}
+
+			meta := product.GetMeta()
+			if meta != nil {
+				productAddons = meta["addons"].GetListValue().AsSlice()
+			}
+
+			for _, resource := range plan.Resources {
+				var key any = resource.GetKey()
+				if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
+					_, ok := i.Data[resource.GetKey()+"_last_monitoring"]
+
+					if ok {
+						last = int64(i.Data[resource.GetKey()+"_last_monitoring"].GetNumberValue())
+					} else {
+						last = time.Now().Unix()
+					}
+
+					if resource.GetPeriod() == 0 {
+						if !ok {
+							records = append(records, handleOneTimeResourcePayment(log, i, resource, last)...)
+							i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
+						} else {
+							capRec, last := handleCapacityBilling(log, i, resource, last)
+							records = append(records, capRec...)
+							i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
+						}
+					}
+				}
+			}
 
 			_, ok := i.Data["last_monitoring"]
 
@@ -194,37 +208,10 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 				priority = billing.Priority_URGENT
 			}
 
-			product := i.GetBillingPlan().GetProducts()[i.GetProduct()]
-
 			if product.GetPeriod() == 0 {
 				if !ok {
 					records = append(records, handleOneTimePayment(log, i, last, priority)...)
 					i.Data["last_monitoring"] = structpb.NewNumberValue(float64(last))
-
-					var configAddons, productAddons []any
-					config := i.GetConfig()
-					if config != nil {
-						configAddons = config["addons"].GetListValue().AsSlice()
-					}
-
-					meta := product.GetMeta()
-					if meta != nil {
-						productAddons = meta["addons"].GetListValue().AsSlice()
-					}
-
-					for _, resource := range plan.Resources {
-						var key any = resource.GetKey()
-						if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
-							if _, ok := i.Data[resource.GetKey()+"_last_monitoring"]; ok {
-								last = int64(i.Data[resource.GetKey()+"_last_monitoring"].GetNumberValue())
-							} else {
-								last = time.Now().Unix()
-							}
-
-							records = append(records, handleOneTimeResourcePayment(log, i, resource, last)...)
-							i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
-						}
-					}
 				}
 			} else {
 				new, last := handleStaticBilling(log, i, last, priority)
@@ -237,39 +224,6 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 					i.Data["next_payment_date"] = structpb.NewNumberValue(float64(last + product.GetPeriod()))
 				} else {
 					i.Data["next_payment_date"] = structpb.NewNumberValue(float64(last))
-				}
-
-				var configAddons, productAddons []any
-				config := i.GetConfig()
-				if config != nil {
-					configAddons = config["addons"].GetListValue().AsSlice()
-				}
-
-				meta := product.GetMeta()
-				if meta != nil {
-					productAddons = meta["addons"].GetListValue().AsSlice()
-				}
-
-				for _, resource := range plan.Resources {
-					var key any = resource.GetKey()
-					if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
-						if _, ok := i.Data[resource.GetKey()+"_last_monitoring"]; ok {
-							last = int64(i.Data[resource.GetKey()+"_last_monitoring"].GetNumberValue())
-						} else {
-							last = time.Now().Unix()
-						}
-						recs, last := handleCapacityBilling(log, i, resource, last)
-						if len(recs) != 0 {
-							records = append(records, recs...)
-							i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
-						}
-
-						if resource.GetKind() == billing.Kind_POSTPAID {
-							i.Data[resource.GetKey()+"_next_payment_date"] = structpb.NewNumberValue(float64(last + resource.GetPeriod()))
-						} else {
-							i.Data[resource.GetKey()+"_next_payment_date"] = structpb.NewNumberValue(float64(last))
-						}
-					}
 				}
 			}
 		}
