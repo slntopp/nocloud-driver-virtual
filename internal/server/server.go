@@ -203,6 +203,8 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 				regularPayment = instConfig["regular_payment"].GetBoolValue()
 			}
 
+			log.Debug("Cfg", zap.String("uuid", i.GetUuid()), zap.Any("cfg", instConfig))
+
 			if regularPayment {
 				go s._handleInstanceBilling(i)
 			} else {
