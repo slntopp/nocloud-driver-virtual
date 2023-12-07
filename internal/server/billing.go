@@ -137,7 +137,7 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 }
 
 func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
-	log := s.log.Named("BillingHandler").Named(i.GetUuid())
+	log := s.log.Named("NonReg").Named(i.GetUuid())
 	log.Debug("Initializing")
 
 	if statespb.NoCloudState_PENDING == i.GetState().GetState() {
