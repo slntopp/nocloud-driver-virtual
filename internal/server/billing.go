@@ -32,17 +32,26 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 		log.Warn("Instance data is not initialized")
 		i.Data = make(map[string]*structpb.Value)
 	}
+	config := i.GetConfig()
 
 	var records []*billing.Record
 
+	var skipPayment []any
+
+	if config != nil {
+		skipPayment = config["skip_next_payment"].GetListValue().AsSlice()
+	}
+
 	if plan.Kind == billing.PlanKind_STATIC {
 		product := i.GetBillingPlan().GetProducts()[i.GetProduct()]
+
+		var iProduct any = i.GetProduct()
 
 		var last int64
 		var priority billing.Priority
 
 		var configAddons, productAddons []any
-		config := i.GetConfig()
+
 		if config != nil {
 			configAddons = config["addons"].GetListValue().AsSlice()
 		}
@@ -65,13 +74,17 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 
 				if resource.GetPeriod() == 0 {
 					if !ok {
-						records = append(records, handleOneTimeResourcePayment(log, i, resource, last)...)
-						i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
-					} else {
-						capRec, last := handleCapacityBilling(log, i, resource, last)
-						records = append(records, capRec...)
+						if !slices.Contains(skipPayment, key) {
+							records = append(records, handleOneTimeResourcePayment(log, i, resource, last)...)
+						}
 						i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
 					}
+				} else {
+					capRec, last := handleCapacityBilling(log, i, resource, last)
+					if ok || (!ok && !slices.Contains(skipPayment, key)) {
+						records = append(records, capRec...)
+					}
+					i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
 				}
 			}
 		}
@@ -88,13 +101,17 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 
 		if product.GetPeriod() == 0 {
 			if !ok {
-				records = append(records, handleOneTimePayment(log, i, last, priority)...)
+				if !slices.Contains(skipPayment, iProduct) {
+					records = append(records, handleOneTimePayment(log, i, last, priority)...)
+				}
 				i.Data["last_monitoring"] = structpb.NewNumberValue(float64(last))
 			}
 		} else {
 			new, last := handleStaticBilling(log, i, last, priority)
 			if len(new) != 0 {
-				records = append(records, new...)
+				if ok || (!ok && !slices.Contains(skipPayment, iProduct)) {
+					records = append(records, new...)
+				}
 				i.Data["last_monitoring"] = structpb.NewNumberValue(float64(last))
 			}
 
