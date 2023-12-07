@@ -200,7 +200,11 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 			regularPayment := true
 
 			if instConfig != nil {
-				regularPayment = instConfig["regular_payment"].GetBoolValue()
+				regularPaymentVal, ok := instConfig["regular_payment"]
+				if ok {
+					regularPayment = regularPaymentVal.GetBoolValue()
+				}
+
 			}
 
 			log.Debug("Cfg", zap.String("uuid", i.GetUuid()), zap.Any("cfg", instConfig))
