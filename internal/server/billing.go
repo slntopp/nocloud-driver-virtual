@@ -360,7 +360,11 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
 	log.Debug("records", zap.Any("recs", records))
 
 	s.HandlePublishRecords(records)
-
+	s.HandlePublishEvent(&epb.Event{
+		Type: "instance_renew",
+		Uuid: inst.GetUuid(),
+		Data: map[string]*structpb.Value{},
+	})
 	s.HandlePublishInstanceData(&instances.ObjectData{
 		Uuid: inst.GetUuid(),
 		Data: instData,
