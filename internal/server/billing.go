@@ -198,6 +198,18 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 			})
 		}
 
+		product := i.GetBillingPlan().GetProducts()[i.GetProduct()]
+
+		if product.GetKind() == billing.Kind_POSTPAID {
+			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(lastMonitoringValue + product.GetPeriod()))
+		} else {
+			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(lastMonitoringValue))
+		}
+
+		s.HandlePublishInstanceData(&instances.ObjectData{
+			Uuid: i.GetUuid(),
+			Data: i.Data,
+		})
 		s._handleEvent(i)
 	} else {
 		plan := i.GetBillingPlan()
