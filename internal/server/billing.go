@@ -1,17 +1,35 @@
 package server
 
 import (
+	"fmt"
 	"math"
 	"slices"
 	"time"
 
 	"github.com/slntopp/nocloud-proto/billing"
+	epb "github.com/slntopp/nocloud-proto/events"
 	"github.com/slntopp/nocloud-proto/instances"
 	statespb "github.com/slntopp/nocloud-proto/states"
+	statusespb "github.com/slntopp/nocloud-proto/statuses"
 
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 )
+
+type ExpiryDiff struct {
+	Timestamp int64
+	Days      int64
+}
+
+var notificationsPeriods = []ExpiryDiff{
+	{0, 0},
+	{86400, 1},
+	{172800, 2},
+	{259200, 3},
+	{604800, 7},
+	{1296000, 15},
+	{2592000, 30},
+}
 
 func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 	log := s.log.Named("BillingHandler").Named(i.GetUuid())
@@ -124,6 +142,8 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 	}
 
 	log.Debug("Resulting billing", zap.Any("records", records))
+
+	s._handleEvent(i)
 	s.HandlePublishRecords(records)
 	s.HandlePublishInstanceData(&instances.ObjectData{
 		Uuid: i.GetUuid(), Data: i.Data,
@@ -157,6 +177,12 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 					State: statespb.NoCloudState_SUSPENDED,
 				},
 			})
+
+			go s.HandlePublishEvent(&epb.Event{
+				Uuid: i.GetUuid(),
+				Key:  "instance_suspended",
+				Data: map[string]*structpb.Value{},
+			})
 		} else if now <= lastMonitoringValue && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !suspendedManually {
 			go s.HandlePublishInstanceState(&statespb.ObjectState{
 				Uuid: i.GetUuid(),
@@ -164,7 +190,15 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 					State: statespb.NoCloudState_RUNNING,
 				},
 			})
+
+			go s.HandlePublishEvent(&epb.Event{
+				Uuid: i.GetUuid(),
+				Key:  "instance_unsuspended",
+				Data: map[string]*structpb.Value{},
+			})
 		}
+
+		s._handleEvent(i)
 	} else {
 		plan := i.GetBillingPlan()
 		if plan == nil {
@@ -247,6 +281,7 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 
 		log.Debug("Resulting billing", zap.Any("records", records))
 		s.HandlePublishRecords(records)
+		s._handleEvent(i)
 		s.HandlePublishInstanceData(&instances.ObjectData{
 			Uuid: i.GetUuid(), Data: i.Data,
 		})
@@ -330,6 +365,86 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
 		Uuid: inst.GetUuid(),
 		Data: instData,
 	})
+}
+
+func (s *VirtualDriver) _handleEvent(i *instances.Instance) {
+	if i.GetStatus() == statusespb.NoCloudStatus_DEL {
+		return
+	}
+
+	data := i.GetData()
+	now := time.Now().Unix()
+
+	last_monitoring, ok := data["last_monitoring"]
+	if !ok {
+		return
+	}
+
+	last_monitoring_value := int64(last_monitoring.GetNumberValue())
+
+	productName := i.GetProduct()
+
+	products := i.GetBillingPlan().GetProducts()
+	product, ok := products[productName]
+
+	if !ok {
+		return
+	}
+
+	productKind := product.GetKind()
+	period := product.GetPeriod()
+
+	var diff int64
+	var expirationDate int64
+
+	if productKind == billing.Kind_PREPAID {
+		diff = last_monitoring_value - now
+		expirationDate = last_monitoring_value
+	} else {
+		diff = last_monitoring_value + period - now
+		expirationDate = last_monitoring_value + period
+	}
+
+	unix := time.Unix(expirationDate, 0)
+	year, month, day := unix.Date()
+	for _, val := range notificationsPeriods {
+		if diff <= val.Timestamp {
+
+			if val.Timestamp == period {
+				break
+			}
+
+			notification_period, ok := data["notification_period"]
+			if !ok {
+				data["notification_period"] = structpb.NewNumberValue(float64(val.Days))
+				go s.HandlePublishEvent(&epb.Event{
+					Uuid: i.GetUuid(),
+					Key:  "expiry_notification",
+					Data: map[string]*structpb.Value{
+						"period":  structpb.NewNumberValue(float64(val.Days)),
+						"product": structpb.NewStringValue(i.GetProduct()),
+						"date":    structpb.NewStringValue(fmt.Sprintf("%d/%d/%d", day, month, year)),
+					},
+				})
+				continue
+			}
+
+			if val.Days != int64(notification_period.GetNumberValue()) {
+				data["notification_period"] = structpb.NewNumberValue(float64(val.Days))
+				go s.HandlePublishEvent(&epb.Event{
+					Uuid: i.GetUuid(),
+					Key:  "expiry_notification",
+					Data: map[string]*structpb.Value{
+						"period":  structpb.NewNumberValue(float64(val.Days)),
+						"product": structpb.NewStringValue(i.GetProduct()),
+						"date":    structpb.NewStringValue(fmt.Sprintf("%d/%d/%d", day, month, year)),
+					},
+				})
+			}
+			break
+		}
+	}
+	i.Data = data
 }
 
 func handleOneTimePayment(log *zap.Logger, i *instances.Instance, last int64, priority billing.Priority) []*billing.Record {
