@@ -197,7 +197,7 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 			}
 
 			instConfig := i.GetConfig()
-			autoRenew := true
+			autoRenew := false
 
 			if instConfig != nil {
 				autoRenewVal, ok := instConfig["auto_renew"]
