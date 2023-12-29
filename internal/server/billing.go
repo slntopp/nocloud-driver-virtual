@@ -165,6 +165,12 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 	}
 
 	if lastMonitoring, ok := i.GetData()["last_monitoring"]; ok {
+		product := i.GetBillingPlan().GetProducts()[i.GetProduct()]
+
+		if product.GetPeriod() == 0 {
+			return
+		}
+
 		now := time.Now().Unix()
 		lastMonitoringValue := int64(lastMonitoring.GetNumberValue())
 
@@ -197,8 +203,6 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 				Data: map[string]*structpb.Value{},
 			})
 		}
-
-		product := i.GetBillingPlan().GetProducts()[i.GetProduct()]
 
 		if product.GetKind() == billing.Kind_POSTPAID {
 			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(lastMonitoringValue + product.GetPeriod()))
