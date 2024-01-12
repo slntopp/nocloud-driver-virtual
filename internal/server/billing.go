@@ -500,6 +500,20 @@ func handleStaticBilling(log *zap.Logger, i *instances.Instance, last int64, pri
 	if product.Kind == billing.Kind_POSTPAID {
 		log.Debug("Handling Postpaid Billing", zap.Any("product", product))
 		for end := last + product.Period; end <= time.Now().Unix(); end += product.Period {
+			if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+				lastDay := time.Unix(last, 0).Day()
+				endDay := time.Unix(end, 0).Day()
+
+				if lastDay-endDay == 1 {
+					end += 86400
+				} else if lastDay-endDay == -29 {
+					end += 2 * 86400
+				} else if lastDay-endDay == -1 {
+					end -= 86400
+				} else if lastDay-endDay == -2 {
+					end -= 2 * 86400
+				}
+			}
 			records = append(records, &billing.Record{
 				Product:  *i.Product,
 				Instance: i.GetUuid(),
@@ -512,6 +526,20 @@ func handleStaticBilling(log *zap.Logger, i *instances.Instance, last int64, pri
 		end := last + product.Period
 		log.Debug("Handling Prepaid Billing", zap.Any("product", product), zap.Int64("end", end), zap.Int64("now", time.Now().Unix()))
 		for ; last <= time.Now().Unix(); end += product.Period {
+			if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+				lastDay := time.Unix(last, 0).Day()
+				endDay := time.Unix(end, 0).Day()
+
+				if lastDay-endDay == 1 {
+					end += 86400
+				} else if lastDay-endDay == -29 {
+					end += 2 * 86400
+				} else if lastDay-endDay == -1 {
+					end -= 86400
+				} else if lastDay-endDay == -2 {
+					end -= 2 * 86400
+				}
+			}
 			records = append(records, &billing.Record{
 				Product:  *i.Product,
 				Instance: i.GetUuid(),
@@ -545,6 +573,20 @@ func handleCapacityBilling(log *zap.Logger, i *instances.Instance, res *billing.
 
 	if res.Kind == billing.Kind_POSTPAID {
 		for end := last + res.Period; end <= time.Now().Unix(); end += res.Period {
+			if res.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+				lastDay := time.Unix(last, 0).Day()
+				endDay := time.Unix(end, 0).Day()
+
+				if lastDay-endDay == 1 {
+					end += 86400
+				} else if lastDay-endDay == -29 {
+					end += 2 * 86400
+				} else if lastDay-endDay == -1 {
+					end -= 86400
+				} else if lastDay-endDay == -2 {
+					end -= 2 * 86400
+				}
+			}
 			records = append(records, &billing.Record{
 				Resource: res.Key,
 				Instance: i.GetUuid(),
@@ -556,6 +598,20 @@ func handleCapacityBilling(log *zap.Logger, i *instances.Instance, res *billing.
 		}
 	} else {
 		for end := last + res.Period; last <= time.Now().Unix(); end += res.Period {
+			if res.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+				lastDay := time.Unix(last, 0).Day()
+				endDay := time.Unix(end, 0).Day()
+
+				if lastDay-endDay == 1 {
+					end += 86400
+				} else if lastDay-endDay == -29 {
+					end += 2 * 86400
+				} else if lastDay-endDay == -1 {
+					end -= 86400
+				} else if lastDay-endDay == -2 {
+					end -= 2 * 86400
+				}
+			}
 			records = append(records, &billing.Record{
 				Resource: res.Key,
 				Instance: i.GetUuid(),

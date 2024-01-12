@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/rabbitmq/amqp091-go v1.9.0
 	github.com/slntopp/nocloud v0.0.18
-	github.com/slntopp/nocloud-proto v0.0.0-20230928084001-11a2827103dc
+	github.com/slntopp/nocloud-proto v0.0.0-20240104141407-df80b400848d
 	github.com/spf13/viper v1.18.2
 	go.uber.org/zap v1.26.0
 	google.golang.org/grpc v1.60.1
@@ -18,7 +18,7 @@ require (
 	github.com/cskr/pubsub v1.0.2 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.0 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
