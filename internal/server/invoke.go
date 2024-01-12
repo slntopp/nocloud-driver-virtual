@@ -32,7 +32,11 @@ func (s *VirtualDriver) Invoke(ctx context.Context, req *pb.InvokeRequest) (*ipb
 			return nil, status.Errorf(codes.PermissionDenied, "Action %s is admin action", method)
 		}
 
-		go s._handleRenewBilling(instance)
+		err := s._handleRenewBilling(instance)
+
+		if err != nil {
+			return &ipb.InvokeResponse{Result: false}, err
+		}
 
 		return &ipb.InvokeResponse{Result: true}, nil
 	} else {

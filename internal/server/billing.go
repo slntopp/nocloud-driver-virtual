@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -304,13 +305,17 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 	}
 }
 
-func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
+func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 	log := s.log.Named("Manual renew")
 	instData := inst.GetData()
 	instProduct := inst.GetProduct()
 	billingPlan := inst.GetBillingPlan()
 
 	product := billingPlan.GetProducts()[instProduct]
+
+	if product.GetPeriod() == 0 {
+		return errors.New("period is 0")
+	}
 
 	log.Debug("Product", zap.Any("pr", instProduct), zap.Any("Product", product))
 
@@ -319,7 +324,7 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
 	lastMonitoring, ok := instData["last_monitoring"]
 	if !ok {
 		log.Error("No last monitoring")
-		return
+		return errors.New("no last monitoring")
 	}
 	lastMonitoringValue := int64(lastMonitoring.GetNumberValue())
 
@@ -385,6 +390,7 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) {
 		Uuid: inst.GetUuid(),
 		Data: instData,
 	})
+	return nil
 }
 
 func (s *VirtualDriver) _handleEvent(i *instances.Instance) {
