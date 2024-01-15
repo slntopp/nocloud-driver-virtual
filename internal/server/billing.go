@@ -394,6 +394,8 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 }
 
 func (s *VirtualDriver) _handleEvent(i *instances.Instance) {
+	log := s.log.Named("BusEvent").Named(i.GetUuid())
+	log.Debug("Get event", zap.String("uuid", i.GetUuid()))
 	if i.GetStatus() == statusespb.NoCloudStatus_DEL {
 		return
 	}
@@ -430,6 +432,8 @@ func (s *VirtualDriver) _handleEvent(i *instances.Instance) {
 		diff = last_monitoring_value + period - now
 		expirationDate = last_monitoring_value + period
 	}
+
+	log.Debug("Diff", zap.Any("d", diff))
 
 	unix := time.Unix(expirationDate, 0)
 	year, month, day := unix.Date()
@@ -470,6 +474,7 @@ func (s *VirtualDriver) _handleEvent(i *instances.Instance) {
 			break
 		}
 	}
+	log.Debug("Data", zap.Any("d", data))
 	i.Data = data
 }
 
