@@ -211,11 +211,11 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(lastMonitoringValue))
 		}
 
+		s._handleEvent(i)
 		s.HandlePublishInstanceData(&instances.ObjectData{
 			Uuid: i.GetUuid(),
 			Data: i.Data,
 		})
-		s._handleEvent(i)
 	} else {
 		plan := i.GetBillingPlan()
 		if plan == nil {
