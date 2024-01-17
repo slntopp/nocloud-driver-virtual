@@ -328,21 +328,38 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 	}
 	lastMonitoringValue := int64(lastMonitoring.GetNumberValue())
 
+	start := lastMonitoringValue
+	end := start + product.GetPeriod()
+
+	if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+
+		lastDay := time.Unix(start, 0).Day()
+		endDay := time.Unix(end, 0).Day()
+
+		if lastDay-endDay == 1 {
+			end += 86400
+		} else if lastDay-endDay == -29 {
+			end += 2 * 86400
+		} else if lastDay-endDay == -1 {
+			end -= 86400
+		} else if lastDay-endDay == -2 {
+			end -= 2 * 86400
+		}
+	}
+
 	var records []*billing.Record
 
 	log.Debug("lm", zap.Any("before", lastMonitoringValue))
 	records = append(records, &billing.Record{
-		Start:    lastMonitoringValue,
-		End:      lastMonitoringValue + product.GetPeriod(),
+		Start:    start,
+		End:      end,
 		Exec:     time.Now().Unix(),
 		Priority: billing.Priority_URGENT,
 		Instance: inst.GetUuid(),
 		Product:  inst.GetProduct(),
 		Total:    product.GetPrice(),
 	})
-	lastMonitoringValue += product.GetPeriod()
-	log.Debug("lm", zap.Any("after", lastMonitoringValue))
-	instData["last_monitoring"] = structpb.NewNumberValue(float64(lastMonitoringValue))
+	instData["last_monitoring"] = structpb.NewNumberValue(float64(end))
 
 	var configAddons, productAddons []any
 	config := inst.GetConfig()
@@ -360,19 +377,36 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 		if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
 			if lm, ok := instData[resource.GetKey()+"_last_monitoring"]; ok {
 				lmVal := lm.GetNumberValue()
-				log.Debug("lm", zap.Any("before", lmVal))
+
+				start := int64(lmVal)
+				end := start + resource.GetPeriod()
+
+				if resource.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+
+					lastDay := time.Unix(start, 0).Day()
+					endDay := time.Unix(end, 0).Day()
+
+					if lastDay-endDay == 1 {
+						end += 86400
+					} else if lastDay-endDay == -29 {
+						end += 2 * 86400
+					} else if lastDay-endDay == -1 {
+						end -= 86400
+					} else if lastDay-endDay == -2 {
+						end -= 2 * 86400
+					}
+				}
+
 				records = append(records, &billing.Record{
-					Start:    int64(lmVal),
-					End:      int64(lmVal) + product.GetPeriod(),
+					Start:    start,
+					End:      end,
 					Exec:     time.Now().Unix(),
 					Priority: billing.Priority_URGENT,
 					Instance: inst.GetUuid(),
 					Resource: resource.GetKey(),
 					Total:    resource.GetPrice(),
 				})
-				lmVal += float64(resource.GetPeriod())
-				log.Debug("lm", zap.Any("before", lmVal))
-				instData[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(lmVal)
+				instData[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(end))
 			}
 		}
 	}
