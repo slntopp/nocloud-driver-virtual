@@ -183,7 +183,7 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 			_, ok := i.GetData()["creation"]
 
 			if !ok {
-				i.Data["creation"] = structpb.NewStringValue(time.Now().Format("2006-01-02"))
+				i.Data["creation"] = structpb.NewNumberValue(float64(time.Now().Unix()))
 				s.HandlePublishEvent(&eventpb.Event{
 					Uuid: i.GetUuid(),
 					Key:  "instance_created",
