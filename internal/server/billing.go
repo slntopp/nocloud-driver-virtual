@@ -3,7 +3,6 @@ package server
 import (
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"time"
 
@@ -371,7 +370,7 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 		Priority: billing.Priority_URGENT,
 		Instance: inst.GetUuid(),
 		Product:  inst.GetProduct(),
-		Total:    product.GetPrice(),
+		Total:    1,
 	})
 	instData["last_monitoring"] = structpb.NewNumberValue(float64(end))
 
@@ -418,7 +417,7 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 					Priority: billing.Priority_URGENT,
 					Instance: inst.GetUuid(),
 					Resource: resource.GetKey(),
-					Total:    resource.GetPrice(),
+					Total:    1,
 				})
 				instData[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(end))
 			}
@@ -541,7 +540,7 @@ func handleOneTimePayment(log *zap.Logger, i *instances.Instance, last int64, pr
 		Instance: i.GetUuid(),
 		Start:    last, End: last + 1, Exec: last,
 		Priority: priority,
-		Total:    math.Round(product.Price*100) / 100.0,
+		Total:    1,
 	})
 
 	return records
@@ -578,7 +577,7 @@ func handleStaticBilling(log *zap.Logger, i *instances.Instance, last int64, pri
 				Instance: i.GetUuid(),
 				Start:    last, End: end, Exec: last,
 				Priority: billing.Priority_NORMAL,
-				Total:    math.Round(product.Price*100) / 100.0,
+				Total:    1,
 			})
 		}
 	} else {
@@ -604,7 +603,7 @@ func handleStaticBilling(log *zap.Logger, i *instances.Instance, last int64, pri
 				Instance: i.GetUuid(),
 				Start:    last, End: end, Exec: last,
 				Priority: priority,
-				Total:    math.Round(product.Price*100) / 100.0,
+				Total:    1,
 			})
 			last = end
 		}
@@ -621,7 +620,7 @@ func handleOneTimeResourcePayment(log *zap.Logger, i *instances.Instance, res *b
 		Instance: i.GetUuid(),
 		Start:    last, End: last + 1,
 		Exec:  last,
-		Total: res.GetPrice(),
+		Total: 1,
 	})
 
 	return records
@@ -651,7 +650,7 @@ func handleCapacityBilling(log *zap.Logger, i *instances.Instance, res *billing.
 				Instance: i.GetUuid(),
 				Start:    last, End: end,
 				Exec:  last,
-				Total: res.GetPrice(),
+				Total: 1,
 			})
 			last = end
 		}
@@ -676,7 +675,7 @@ func handleCapacityBilling(log *zap.Logger, i *instances.Instance, res *billing.
 				Instance: i.GetUuid(),
 				Priority: billing.Priority_URGENT,
 				Start:    last, End: end, Exec: last,
-				Total: res.GetPrice(),
+				Total: 1,
 			})
 			last = end
 		}

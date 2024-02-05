@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/rabbitmq/amqp091-go v1.9.0
 	github.com/slntopp/nocloud v0.0.19-0.20240115110154-e14a5d9b2bb3
-	github.com/slntopp/nocloud-proto v0.0.0-20240104141407-df80b400848d
+	github.com/slntopp/nocloud-proto v0.0.0-20240131090058-8a36382009b4
 	github.com/spf13/viper v1.18.2
 	go.uber.org/zap v1.26.0
 	google.golang.org/grpc v1.61.0
