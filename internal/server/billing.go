@@ -160,6 +160,7 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 
 	s._handleEvent(i)
 	if len(records) != 0 && status == statusespb.NoCloudStatus_SUS {
+		log.Debug("SUS")
 		if i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
 			go s.HandlePublishInstanceState(&statespb.ObjectState{
 				Uuid: i.GetUuid(),
@@ -175,6 +176,7 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 			})
 		}
 	} else {
+		log.Debug("NOT SUS")
 		if i.GetState().GetState() == statespb.NoCloudState_SUSPENDED {
 			go s.HandlePublishInstanceState(&statespb.ObjectState{
 				Uuid: i.GetUuid(),
