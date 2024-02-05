@@ -135,7 +135,21 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 			}
 
 			if product.GetKind() == billing.Kind_POSTPAID {
-				i.Data["next_payment_date"] = structpb.NewNumberValue(float64(last + product.GetPeriod()))
+				end := last + product.GetPeriod()
+				lastDay := time.Unix(last, 0).Day()
+				endDay := time.Unix(end, 0).Day()
+
+				if lastDay-endDay == 1 {
+					end += 86400
+				} else if lastDay-endDay == -29 {
+					end += 2 * 86400
+				} else if lastDay-endDay == -1 {
+					end -= 86400
+				} else if lastDay-endDay == -2 {
+					end -= 2 * 86400
+				}
+
+				i.Data["next_payment_date"] = structpb.NewNumberValue(float64(end))
 			} else {
 				i.Data["next_payment_date"] = structpb.NewNumberValue(float64(last))
 			}
