@@ -527,7 +527,7 @@ func (s *VirtualDriver) _handleEvent(i *instances.Instance) {
 
 func handleOneTimePayment(log *zap.Logger, i *instances.Instance, last int64, priority billing.Priority) []*billing.Record {
 	log.Debug("Handling Static Billing", zap.Int64("last", last))
-	product, ok := i.BillingPlan.Products[*i.Product]
+	_, ok := i.BillingPlan.Products[*i.Product]
 	if !ok {
 		log.Warn("Product not found", zap.String("product", *i.Product))
 		return nil
