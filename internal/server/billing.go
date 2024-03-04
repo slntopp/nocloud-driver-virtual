@@ -251,7 +251,25 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 					Data: map[string]*structpb.Value{},
 				})
 			}
-			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(lastMonitoringValue + product.GetPeriod()))
+
+			end := lastMonitoringValue + product.GetPeriod()
+
+			if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+				lastDay := time.Unix(lastMonitoringValue, 0).Day()
+				endDay := time.Unix(end, 0).Day()
+
+				if lastDay-endDay == 1 {
+					end += 86400
+				} else if lastDay-endDay == -29 {
+					end += 2 * 86400
+				} else if lastDay-endDay == -1 {
+					end -= 86400
+				} else if lastDay-endDay == -2 {
+					end -= 2 * 86400
+				}
+			}
+
+			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(end))
 		} else {
 			if now > lastMonitoringValue && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
 				go s.HandlePublishInstanceState(&statespb.ObjectState{
