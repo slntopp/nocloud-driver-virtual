@@ -35,6 +35,8 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 	log := s.log.Named("BillingHandler").Named(i.GetUuid())
 	log.Debug("Initializing")
 
+	status := i.GetStatus()
+
 	if statespb.NoCloudState_PENDING == i.GetState().GetState() {
 		log.Info("Instance state is init. No instance billing", zap.String("uuid", i.GetUuid()))
 		return
@@ -155,13 +157,44 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 		}
 	}
 
-	log.Debug("Resulting billing", zap.Any("records", records))
+	if len(records) != 0 && status == statusespb.NoCloudStatus_SUS {
+		log.Debug("SUS")
+		if i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
+			go s.HandlePublishInstanceState(&statespb.ObjectState{
+				Uuid: i.GetUuid(),
+				State: &statespb.State{
+					State: statespb.NoCloudState_SUSPENDED,
+				},
+			})
 
-	s._handleEvent(i)
-	s.HandlePublishRecords(records)
-	s.HandlePublishInstanceData(&instances.ObjectData{
-		Uuid: i.GetUuid(), Data: i.Data,
-	})
+			go s.HandlePublishEvent(&epb.Event{
+				Uuid: i.GetUuid(),
+				Key:  "instance_suspended",
+				Data: map[string]*structpb.Value{},
+			})
+		}
+	} else {
+		log.Debug("NOT SUS")
+		if i.GetState().GetState() == statespb.NoCloudState_SUSPENDED {
+			go s.HandlePublishInstanceState(&statespb.ObjectState{
+				Uuid: i.GetUuid(),
+				State: &statespb.State{
+					State: statespb.NoCloudState_RUNNING,
+				},
+			})
+
+			go s.HandlePublishEvent(&epb.Event{
+				Uuid: i.GetUuid(),
+				Key:  "instance_unsuspended",
+				Data: map[string]*structpb.Value{},
+			})
+		}
+		s._handleEvent(i)
+		s.HandlePublishRecords(records)
+		s.HandlePublishInstanceData(&instances.ObjectData{
+			Uuid: i.GetUuid(), Data: i.Data,
+		})
+	}
 }
 
 func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
@@ -190,37 +223,63 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 
 		suspendedManually := i.GetData()["suspended_manually"].GetBoolValue()
 
-		if now > lastMonitoringValue && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
-			go s.HandlePublishInstanceState(&statespb.ObjectState{
-				Uuid: i.GetUuid(),
-				State: &statespb.State{
-					State: statespb.NoCloudState_SUSPENDED,
-				},
-			})
-
-			go s.HandlePublishEvent(&epb.Event{
-				Uuid: i.GetUuid(),
-				Key:  "instance_suspended",
-				Data: map[string]*structpb.Value{},
-			})
-		} else if now <= lastMonitoringValue && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !suspendedManually {
-			go s.HandlePublishInstanceState(&statespb.ObjectState{
-				Uuid: i.GetUuid(),
-				State: &statespb.State{
-					State: statespb.NoCloudState_RUNNING,
-				},
-			})
-
-			go s.HandlePublishEvent(&epb.Event{
-				Uuid: i.GetUuid(),
-				Key:  "instance_unsuspended",
-				Data: map[string]*structpb.Value{},
-			})
-		}
-
 		if product.GetKind() == billing.Kind_POSTPAID {
+			if now > lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
+				go s.HandlePublishInstanceState(&statespb.ObjectState{
+					Uuid: i.GetUuid(),
+					State: &statespb.State{
+						State: statespb.NoCloudState_SUSPENDED,
+					},
+				})
+
+				go s.HandlePublishEvent(&epb.Event{
+					Uuid: i.GetUuid(),
+					Key:  "instance_suspended",
+					Data: map[string]*structpb.Value{},
+				})
+			} else if now <= lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !suspendedManually {
+				go s.HandlePublishInstanceState(&statespb.ObjectState{
+					Uuid: i.GetUuid(),
+					State: &statespb.State{
+						State: statespb.NoCloudState_RUNNING,
+					},
+				})
+
+				go s.HandlePublishEvent(&epb.Event{
+					Uuid: i.GetUuid(),
+					Key:  "instance_unsuspended",
+					Data: map[string]*structpb.Value{},
+				})
+			}
 			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(lastMonitoringValue + product.GetPeriod()))
 		} else {
+			if now > lastMonitoringValue && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
+				go s.HandlePublishInstanceState(&statespb.ObjectState{
+					Uuid: i.GetUuid(),
+					State: &statespb.State{
+						State: statespb.NoCloudState_SUSPENDED,
+					},
+				})
+
+				go s.HandlePublishEvent(&epb.Event{
+					Uuid: i.GetUuid(),
+					Key:  "instance_suspended",
+					Data: map[string]*structpb.Value{},
+				})
+			} else if now <= lastMonitoringValue && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !suspendedManually {
+				go s.HandlePublishInstanceState(&statespb.ObjectState{
+					Uuid: i.GetUuid(),
+					State: &statespb.State{
+						State: statespb.NoCloudState_RUNNING,
+					},
+				})
+
+				go s.HandlePublishEvent(&epb.Event{
+					Uuid: i.GetUuid(),
+					Key:  "instance_unsuspended",
+					Data: map[string]*structpb.Value{},
+				})
+			}
 			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(lastMonitoringValue))
 		}
 
