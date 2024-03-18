@@ -151,6 +151,8 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 				cfgAutoStart := instConfig["auto_start"].GetBoolValue()
 				autoStart := bpMeta["auto_start"].GetBoolValue()
 
+				log.Debug("Start", zap.Bool("meta", autoStart), zap.Bool("cfg", cfgAutoStart))
+
 				if autoStart || cfgAutoStart {
 					i.State = &stpb.State{
 						State: stpb.NoCloudState_RUNNING,
