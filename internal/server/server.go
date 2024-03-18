@@ -145,7 +145,13 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 
 			instConfig := i.GetConfig()
 
-			if i.GetState() == nil {
+			stateNil := i.GetState() == nil
+			statePending := true
+			if i.GetState() != nil {
+				statePending = i.GetState().GetState() == stpb.NoCloudState_PENDING
+			}
+
+			if stateNil || statePending {
 				bpMeta := i.GetBillingPlan().GetMeta()
 
 				cfgAutoStart := instConfig["auto_start"].GetBoolValue()
