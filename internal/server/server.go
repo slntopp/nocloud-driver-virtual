@@ -142,13 +142,15 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 			if i.GetData() == nil {
 				i.Data = make(map[string]*structpb.Value)
 			}
+			instConfig := i.GetConfig()
 
 			if i.GetState() == nil {
 				bpMeta := i.GetBillingPlan().GetMeta()
 
+				cfgAutoStart := instConfig["auto_start"].GetBoolValue()
 				autoStart := bpMeta["auto_start"].GetBoolValue()
 
-				if autoStart {
+				if autoStart || cfgAutoStart {
 					i.State = &stpb.State{
 						State: stpb.NoCloudState_RUNNING,
 					}
@@ -196,7 +198,6 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 				})
 			}
 
-			instConfig := i.GetConfig()
 			autoRenew := false
 
 			if instConfig != nil {
