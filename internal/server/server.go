@@ -163,7 +163,7 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 					i.State = &stpb.State{
 						State: stpb.NoCloudState_RUNNING,
 					}
-					i.Data["start"] = structpb.NewStringValue(time.Now().Format("2006-01-02"))
+					i.Data["start"] = structpb.NewNumberValue(float64(time.Now().Unix()))
 					s.HandlePublishInstanceData(&ipb.ObjectData{
 						Uuid: i.GetUuid(),
 						Data: i.GetData(),
