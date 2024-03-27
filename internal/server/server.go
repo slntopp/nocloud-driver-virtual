@@ -17,7 +17,6 @@ package server
 
 import (
 	"context"
-	eventpb "github.com/slntopp/nocloud-proto/events"
 	"time"
 
 	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
@@ -195,13 +194,6 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 
 			if !ok {
 				i.Data["creation"] = structpb.NewNumberValue(float64(time.Now().Unix()))
-				s.HandlePublishEvent(&eventpb.Event{
-					Uuid: i.GetUuid(),
-					Key:  "instance_created",
-					Data: map[string]*structpb.Value{
-						"type": structpb.NewStringValue("virtual"),
-					},
-				})
 				s.HandlePublishInstanceData(&ipb.ObjectData{
 					Uuid: i.GetUuid(), Data: i.GetData(),
 				})
