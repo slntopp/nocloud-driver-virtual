@@ -211,11 +211,13 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 
 			log.Debug("Cfg", zap.String("uuid", i.GetUuid()), zap.Any("cfg", instConfig))
 
+			balance := req.GetBalance()[group.GetUuid()]
 			if autoRenew {
-				go s._handleInstanceBilling(i)
+				go s._handleInstanceBilling(i, &balance)
 			} else {
 				go s._handleNonRegularBilling(i)
 			}
+			req.Balance[group.GetUuid()] = balance
 		}
 	}
 

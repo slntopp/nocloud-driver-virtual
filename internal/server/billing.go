@@ -32,7 +32,7 @@ var notificationsPeriods = []ExpiryDiff{
 	{2592000, 30},
 }
 
-func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
+func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *float64) {
 	log := s.log.Named("BillingHandler").Named(i.GetUuid())
 	log.Debug("Initializing")
 
@@ -176,6 +176,30 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 		}
 	} else {
 		log.Debug("NOT SUS")
+		var price float64
+		for _, rec := range records {
+			price += rec.GetTotal()
+		}
+
+		if price > *balance {
+			if i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
+				go s.HandlePublishInstanceState(&statespb.ObjectState{
+					Uuid: i.GetUuid(),
+					State: &statespb.State{
+						State: statespb.NoCloudState_SUSPENDED,
+					},
+				})
+
+				go s.HandlePublishEvent(&epb.Event{
+					Uuid: i.GetUuid(),
+					Key:  "instance_suspended",
+					Data: map[string]*structpb.Value{},
+				})
+			}
+			return
+		}
+
+		*balance -= price
 		if i.GetState().GetState() == statespb.NoCloudState_SUSPENDED {
 			go s.HandlePublishInstanceState(&statespb.ObjectState{
 				Uuid: i.GetUuid(),
