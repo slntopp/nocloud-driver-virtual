@@ -530,10 +530,16 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 	log.Debug("records", zap.Any("recs", records))
 
 	s.HandlePublishRecords(records)
+	var price float64
+	for _, r := range records {
+		price += r.GetTotal()
+	}
 	s.HandlePublishEvent(&epb.Event{
 		Type: "instance_renew",
 		Uuid: inst.GetUuid(),
-		Data: map[string]*structpb.Value{},
+		Data: map[string]*structpb.Value{
+			"price": structpb.NewNumberValue(price),
+		},
 	})
 	s.HandlePublishInstanceData(&instances.ObjectData{
 		Uuid: inst.GetUuid(),
