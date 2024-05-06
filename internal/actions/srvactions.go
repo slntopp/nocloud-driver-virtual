@@ -1,13 +1,14 @@
 package actions
 
 import (
+	"slices"
+	"time"
+
 	billingpb "github.com/slntopp/nocloud-proto/billing"
 	ipb "github.com/slntopp/nocloud-proto/instances"
 	stpb "github.com/slntopp/nocloud-proto/states"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"slices"
-	"time"
 
 	"github.com/slntopp/nocloud/pkg/instances"
 	"github.com/slntopp/nocloud/pkg/states"
@@ -19,6 +20,8 @@ type ServiceAction func(states.Pub, instances.Pub, *ipb.Instance, map[string]*st
 
 var SrvActions = map[string]ServiceAction{
 	"change_state": ChangeState,
+	"freeze":       Freeze,
+	"unfreeze":     Unfreeze,
 }
 
 var BillingActions = map[string]ServiceAction{
@@ -55,6 +58,31 @@ func ChangeState(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data m
 	if err != nil {
 		return nil, err
 	}
+
+	return &ipb.InvokeResponse{
+		Result: true,
+	}, nil
+}
+
+func Freeze(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+	inst.Data["freeze"] = structpb.NewBoolValue(true)
+	inst.Data["freeze_date"] = data["date"]
+	iPub(&ipb.ObjectData{
+		Uuid: inst.GetUuid(),
+		Data: inst.GetData(),
+	})
+
+	return &ipb.InvokeResponse{
+		Result: true,
+	}, nil
+}
+
+func Unfreeze(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+	inst.Data["freeze"] = structpb.NewBoolValue(false)
+	iPub(&ipb.ObjectData{
+		Uuid: inst.GetUuid(),
+		Data: inst.GetData(),
+	})
 
 	return &ipb.InvokeResponse{
 		Result: true,
