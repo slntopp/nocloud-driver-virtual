@@ -17,7 +17,6 @@ package server
 
 import (
 	"context"
-	eventpb "github.com/slntopp/nocloud-proto/events"
 	"time"
 
 	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
@@ -144,7 +143,15 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 			}
 			instConfig := i.GetConfig()
 
-			if i.GetState() == nil {
+			instConfig := i.GetConfig()
+
+			stateNil := i.GetState() == nil
+			statePending := true
+			if i.GetState() != nil {
+				statePending = i.GetState().GetState() == stpb.NoCloudState_PENDING
+			}
+
+			if stateNil || statePending {
 				bpMeta := i.GetBillingPlan().GetMeta()
 
 				cfgAutoStart := instConfig["auto_start"].GetBoolValue()
@@ -154,7 +161,7 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 					i.State = &stpb.State{
 						State: stpb.NoCloudState_RUNNING,
 					}
-					i.Data["start"] = structpb.NewStringValue(time.Now().Format("2006-01-02"))
+					i.Data["start"] = structpb.NewNumberValue(float64(time.Now().Unix()))
 					s.HandlePublishInstanceData(&ipb.ObjectData{
 						Uuid: i.GetUuid(),
 						Data: i.GetData(),
@@ -186,13 +193,6 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 
 			if !ok {
 				i.Data["creation"] = structpb.NewNumberValue(float64(time.Now().Unix()))
-				s.HandlePublishEvent(&eventpb.Event{
-					Uuid: i.GetUuid(),
-					Key:  "instance_created",
-					Data: map[string]*structpb.Value{
-						"type": structpb.NewStringValue("virtual"),
-					},
-				})
 				s.HandlePublishInstanceData(&ipb.ObjectData{
 					Uuid: i.GetUuid(), Data: i.GetData(),
 				})
@@ -210,11 +210,13 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 
 			log.Debug("Cfg", zap.String("uuid", i.GetUuid()), zap.Any("cfg", instConfig))
 
+			balance := req.GetBalance()[group.GetUuid()]
 			if autoRenew {
-				go s._handleInstanceBilling(i)
+				go s._handleInstanceBilling(i, &balance)
 			} else {
 				go s._handleNonRegularBilling(i)
 			}
+			req.Balance[group.GetUuid()] = balance
 		}
 	}
 
