@@ -143,8 +143,6 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 			}
 			instConfig := i.GetConfig()
 
-			instConfig := i.GetConfig()
-
 			stateNil := i.GetState() == nil
 			statePending := true
 			if i.GetState() != nil {
