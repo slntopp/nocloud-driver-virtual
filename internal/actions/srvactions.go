@@ -66,7 +66,6 @@ func ChangeState(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data m
 
 func Freeze(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
 	inst.Data["freeze"] = structpb.NewBoolValue(true)
-	inst.Data["freeze_date"] = data["date"]
 	iPub(&ipb.ObjectData{
 		Uuid: inst.GetUuid(),
 		Data: inst.GetData(),
