@@ -3,7 +3,7 @@ module github.com/slntopp/nocloud-driver-virtual
 go 1.21
 
 require (
-	github.com/rabbitmq/amqp091-go v1.9.0
+	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/slntopp/nocloud v0.0.19-0.20240115110154-e14a5d9b2bb3
 	github.com/slntopp/nocloud-proto v0.0.0-20240402190728-1f4ca760fb28
 	github.com/spf13/viper v1.18.2
