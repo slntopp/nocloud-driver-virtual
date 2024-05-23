@@ -20,6 +20,7 @@ import (
 	"time"
 
 	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
+	epb "github.com/slntopp/nocloud-proto/events"
 	ipb "github.com/slntopp/nocloud-proto/instances"
 	sppb "github.com/slntopp/nocloud-proto/services_providers"
 	stpb "github.com/slntopp/nocloud-proto/states"
@@ -170,6 +171,18 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 				} else {
 					i.State = &stpb.State{
 						State: stpb.NoCloudState_PENDING,
+					}
+
+					if !i.GetData()["pending_notification"].GetBoolValue() {
+						go s.HandlePublishEvent(&epb.Event{
+							Uuid: i.GetUuid(),
+							Key:  "pending_notification",
+						})
+						i.Data["pending_notification"] = structpb.NewBoolValue(true)
+						go s.HandlePublishInstanceData(&ipb.ObjectData{
+							Uuid: i.GetUuid(),
+							Data: i.GetData(),
+						})
 					}
 				}
 
