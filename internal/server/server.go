@@ -134,6 +134,10 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 	sp := req.GetServicesProvider()
 	log.Info("Starting Routine", zap.String("sp", sp.GetUuid()))
 
+	if req.GetBalance() == nil {
+		req.Balance = make(map[string]float64)
+	}
+
 	for _, group := range req.GetGroups() {
 		log.Debug("Monitoring Group", zap.String("uuid", group.GetUuid()), zap.String("title", group.GetTitle()), zap.Int("instances", len(group.GetInstances())))
 		for _, i := range group.GetInstances() {
@@ -142,7 +146,7 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 			if i.GetData() == nil {
 				i.Data = make(map[string]*structpb.Value)
 			}
-			if i.GetConfig() == nil{
+			if i.GetConfig() == nil {
 				i.Config = make(map[string]*structpb.Value)
 			}
 
