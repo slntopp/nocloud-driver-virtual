@@ -142,6 +142,9 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 			if i.GetData() == nil {
 				i.Data = make(map[string]*structpb.Value)
 			}
+			if i.GetConfig() == nil{
+				i.Config = make(map[string]*structpb.Value)
+			}
 
 			instConfig := i.GetConfig()
 
