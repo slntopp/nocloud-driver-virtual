@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"github.com/slntopp/nocloud-driver-virtual/internal/utils"
 	"slices"
 	"time"
 
@@ -29,38 +30,6 @@ var notificationsPeriods = []ExpiryDiff{
 	{604800, 7},
 	{1296000, 15},
 	{2592000, 30},
-}
-
-func AlignPaymentDate(start int64, end int64, period int64) int64 {
-	// Apply only on month period
-	if period != 30*86400 {
-		return end
-	}
-
-	daysInMonth := func(year int, month time.Month) int {
-		return time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
-	}
-
-	startTime := time.Unix(start, 0).In(time.UTC)
-	dayStart := startTime.Day()
-	daysInMonthStart := daysInMonth(startTime.Year(), startTime.Month())
-	endTime := time.Unix(end, 0).In(time.UTC)
-	yearAfterStartDate := startTime.AddDate(0, 0, daysInMonthStart-startTime.Day()+1).Year()
-	monthAfterStartDate := startTime.AddDate(0, 0, daysInMonthStart-startTime.Day()+1).Month()
-	daysInMonthEnd := daysInMonth(yearAfterStartDate, monthAfterStartDate)
-
-	// Happens when start is 1st day in 31day month
-	if startTime.Month() == endTime.Month() {
-		return startTime.AddDate(0, 1, 0).Unix()
-	}
-
-	// Default case, just add month
-	if dayStart <= daysInMonthEnd {
-		return startTime.AddDate(0, 1, 0).Unix()
-	}
-
-	// Overlapping case. Add month and subtract days
-	return startTime.AddDate(0, 1, daysInMonthEnd-dayStart).Unix()
 }
 
 func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
@@ -169,7 +138,7 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance) {
 
 			if product.GetKind() == billing.Kind_POSTPAID {
 				end := last + product.GetPeriod()
-				end = AlignPaymentDate(last, end, product.GetPeriod())
+				end = utils.AlignPaymentDate(last, end, product.GetPeriod())
 
 				i.Data["next_payment_date"] = structpb.NewNumberValue(float64(end))
 			} else {
@@ -281,7 +250,7 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 			end := lastMonitoringValue + product.GetPeriod()
 
 			if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-				end = AlignPaymentDate(lastMonitoringValue, end, product.GetPeriod())
+				end = utils.AlignPaymentDate(lastMonitoringValue, end, product.GetPeriod())
 			}
 
 			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(end))
@@ -437,7 +406,7 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 	end := start + product.GetPeriod()
 
 	if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-		end = AlignPaymentDate(start, end, product.GetPeriod())
+		end = utils.AlignPaymentDate(start, end, product.GetPeriod())
 	}
 
 	var records []*billing.Record
@@ -475,7 +444,7 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 				end := start + resource.GetPeriod()
 
 				if resource.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-					end = AlignPaymentDate(start, end, resource.GetPeriod())
+					end = utils.AlignPaymentDate(start, end, resource.GetPeriod())
 				}
 
 				records = append(records, &billing.Record{
@@ -633,7 +602,7 @@ func handleStaticBilling(log *zap.Logger, i *instances.Instance, last int64, pri
 		log.Debug("Handling Postpaid Billing", zap.Any("product", product))
 		for end := last + product.Period; end <= time.Now().Unix(); end += product.Period {
 			if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-				end = AlignPaymentDate(last, end, product.GetPeriod())
+				end = utils.AlignPaymentDate(last, end, product.GetPeriod())
 			}
 			records = append(records, &billing.Record{
 				Product:  *i.Product,
@@ -648,7 +617,7 @@ func handleStaticBilling(log *zap.Logger, i *instances.Instance, last int64, pri
 		log.Debug("Handling Prepaid Billing", zap.Any("product", product), zap.Int64("end", end), zap.Int64("now", time.Now().Unix()))
 		for ; last <= time.Now().Unix(); end += product.Period {
 			if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-				end = AlignPaymentDate(last, end, product.GetPeriod())
+				end = utils.AlignPaymentDate(last, end, product.GetPeriod())
 			}
 			records = append(records, &billing.Record{
 				Product:  *i.Product,
@@ -684,7 +653,7 @@ func handleCapacityBilling(log *zap.Logger, i *instances.Instance, res *billing.
 	if res.Kind == billing.Kind_POSTPAID {
 		for end := last + res.Period; end <= time.Now().Unix(); end += res.Period {
 			if res.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-				end = AlignPaymentDate(last, end, res.GetPeriod())
+				end = utils.AlignPaymentDate(last, end, res.GetPeriod())
 			}
 			records = append(records, &billing.Record{
 				Resource: res.Key,
@@ -698,7 +667,7 @@ func handleCapacityBilling(log *zap.Logger, i *instances.Instance, res *billing.
 	} else {
 		for end := last + res.Period; last <= time.Now().Unix(); end += res.Period {
 			if res.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-				end = AlignPaymentDate(last, end, res.GetPeriod())
+				end = utils.AlignPaymentDate(last, end, res.GetPeriod())
 			}
 			records = append(records, &billing.Record{
 				Resource: res.Key,
