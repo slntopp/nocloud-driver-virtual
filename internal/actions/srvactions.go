@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"github.com/slntopp/nocloud-driver-virtual/internal/utils"
 	"slices"
 	"time"
 
@@ -22,6 +23,7 @@ var SrvActions = map[string]ServiceAction{
 	"change_state": ChangeState,
 	"freeze":       Freeze,
 	"unfreeze":     Unfreeze,
+	"cancel_renew": CancelRenew,
 }
 
 var BillingActions = map[string]ServiceAction{
@@ -106,7 +108,7 @@ func ManualRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data m
 
 	period := billingPlan.GetProducts()[instProduct].GetPeriod()
 
-	lastMonitoringValue += period
+	lastMonitoringValue = utils.AlignPaymentDate(lastMonitoringValue, lastMonitoringValue+period, period)
 	instData["last_monitoring"] = structpb.NewNumberValue(float64(lastMonitoringValue))
 
 	var configAddons, productAddons []any
@@ -125,7 +127,57 @@ func ManualRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data m
 		if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
 			if lm, ok := instData[resource.GetKey()+"_last_monitoring"]; ok {
 				lmVal := lm.GetNumberValue()
-				lmVal += float64(resource.GetPeriod())
+				lmVal = float64(utils.AlignPaymentDate(int64(lmVal), int64(lmVal)+resource.GetPeriod(), resource.GetPeriod()))
+				instData[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(lmVal)
+			}
+		}
+	}
+
+	iPub(&ipb.ObjectData{
+		Uuid: inst.GetUuid(),
+		Data: instData,
+	})
+	return &ipb.InvokeResponse{Result: true}, nil
+}
+
+func CancelRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+	instData := inst.GetData()
+	instProduct := inst.GetProduct()
+	billingPlan := inst.GetBillingPlan()
+
+	kind := billingPlan.GetKind()
+	if kind != billingpb.PlanKind_STATIC {
+		return &ipb.InvokeResponse{Result: false}, status.Error(codes.Internal, "Not implemented for dynamic plan")
+	}
+
+	lastMonitoring, ok := instData["last_monitoring"]
+	if !ok {
+		return &ipb.InvokeResponse{Result: false}, status.Error(codes.Internal, "No last_monitoring data")
+	}
+	lastMonitoringValue := int64(lastMonitoring.GetNumberValue())
+
+	period := billingPlan.GetProducts()[instProduct].GetPeriod()
+
+	lastMonitoringValue = utils.AlignPaymentDate(lastMonitoringValue, lastMonitoringValue-period, period)
+	instData["last_monitoring"] = structpb.NewNumberValue(float64(lastMonitoringValue))
+
+	var configAddons, productAddons []any
+	config := inst.GetConfig()
+	if config != nil {
+		configAddons = config["addons"].GetListValue().AsSlice()
+	}
+
+	meta := billingPlan.GetProducts()[instProduct].GetMeta()
+	if meta != nil {
+		productAddons = meta["addons"].GetListValue().AsSlice()
+	}
+
+	for _, resource := range billingPlan.Resources {
+		var key any = resource.GetKey()
+		if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
+			if lm, ok := instData[resource.GetKey()+"_last_monitoring"]; ok {
+				lmVal := lm.GetNumberValue()
+				lmVal = float64(utils.AlignPaymentDate(int64(lmVal), int64(lmVal)-resource.GetPeriod(), resource.GetPeriod()))
 				instData[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(lmVal)
 			}
 		}
