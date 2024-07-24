@@ -27,7 +27,9 @@ var SrvActions = map[string]ServiceAction{
 }
 
 var BillingActions = map[string]ServiceAction{
-	"manual_renew": ManualRenew,
+	"manual_renew": nil,
+	"cancel_renew": CancelRenew,
+	"renew":        ManualRenew,
 }
 
 func ChangeState(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {

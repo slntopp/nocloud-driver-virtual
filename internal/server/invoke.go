@@ -27,15 +27,18 @@ func (s *VirtualDriver) Invoke(ctx context.Context, req *pb.InvokeRequest) (*ipb
 	action, ok := actions.SrvActions[method]
 
 	if !ok {
-		_, ok = actions.BillingActions[method]
+		action, ok = actions.BillingActions[method]
 		if !ok {
 			return nil, status.Errorf(codes.PermissionDenied, "Action %s is admin action", method)
 		}
 
-		err := s._handleRenewBilling(instance)
-
-		if err != nil {
-			return &ipb.InvokeResponse{Result: false}, err
+		if method == "manual_renew" {
+			err := s._handleRenewBilling(instance)
+			if err != nil {
+				return &ipb.InvokeResponse{Result: false}, err
+			}
+		} else {
+			return action(s.HandlePublishInstanceState, s.HandlePublishInstanceData, instance, req.GetParams())
 		}
 
 		return &ipb.InvokeResponse{Result: true}, nil
