@@ -17,6 +17,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
@@ -81,6 +82,46 @@ func (s *VirtualDriver) TestInstancesGroupConfig(ctx context.Context, req *ipb.T
 	log.Debug("Request received", zap.Any("request", req))
 
 	return &ipb.TestInstancesGroupConfigResponse{Result: true}, nil
+}
+
+func (s *VirtualDriver) GetExpiration(_ context.Context, request *pb.GetExpirationRequest) (*pb.GetExpirationResponse, error) {
+	records := make([]*pb.ExpirationRecord, 0)
+	inst := request.GetInstance()
+	bp := inst.GetBillingPlan()
+	data := inst.GetData()
+
+	product, hasProduct := bp.GetProducts()[inst.GetProduct()]
+	if hasProduct {
+		if lm, ok := data["last_monitoring"]; ok && product.GetPeriod() > 0 {
+			records = append(records, &pb.ExpirationRecord{
+				Expires: int64(lm.GetNumberValue()),
+				Product: inst.GetProduct(),
+				Period:  product.GetPeriod(),
+			})
+		}
+
+		for _, a := range inst.GetAddons() {
+			if lm, ok := data[fmt.Sprintf("addon_%s_last_monitoring", a)]; ok && product.GetPeriod() > 0 {
+				records = append(records, &pb.ExpirationRecord{
+					Expires: int64(lm.GetNumberValue()),
+					Addon:   a,
+					Period:  product.GetPeriod(),
+				})
+			}
+		}
+	}
+
+	for _, res := range bp.Resources {
+		if lm, ok := data[fmt.Sprintf("%s_last_monitoring", res.GetKey())]; ok && res.GetPeriod() > 0 {
+			records = append(records, &pb.ExpirationRecord{
+				Expires:  int64(lm.GetNumberValue()),
+				Resource: res.GetKey(),
+				Period:   res.GetPeriod(),
+			})
+		}
+	}
+
+	return &pb.GetExpirationResponse{Records: records}, nil
 }
 
 func (s *VirtualDriver) Up(ctx context.Context, input *pb.UpRequest) (*pb.UpResponse, error) {
