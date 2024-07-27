@@ -85,6 +85,7 @@ func (s *VirtualDriver) TestInstancesGroupConfig(ctx context.Context, req *ipb.T
 }
 
 func (s *VirtualDriver) GetExpiration(_ context.Context, request *pb.GetExpirationRequest) (*pb.GetExpirationResponse, error) {
+	log := s.log.Named("GetExpiration")
 	records := make([]*pb.ExpirationRecord, 0)
 	inst := request.GetInstance()
 	bp := inst.GetBillingPlan()
@@ -121,6 +122,7 @@ func (s *VirtualDriver) GetExpiration(_ context.Context, request *pb.GetExpirati
 		}
 	}
 
+	log.Info("Response records", zap.Any("records", records))
 	return &pb.GetExpirationResponse{Records: records}, nil
 }
 
