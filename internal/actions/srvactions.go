@@ -29,7 +29,7 @@ var SrvActions = map[string]ServiceAction{
 var BillingActions = map[string]ServiceAction{
 	"manual_renew": nil,
 	"cancel_renew": CancelRenew,
-	"renew":        ManualRenew,
+	"free_renew":   FreeRenew,
 }
 
 func ChangeState(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
@@ -92,7 +92,7 @@ func Unfreeze(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[
 	}, nil
 }
 
-func ManualRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+func FreeRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
 	instData := inst.GetData()
 	instProduct := inst.GetProduct()
 	billingPlan := inst.GetBillingPlan()
