@@ -1,8 +1,8 @@
 package actions
 
 import (
+	"fmt"
 	"github.com/slntopp/nocloud-driver-virtual/internal/utils"
-	"slices"
 	"time"
 
 	billingpb "github.com/slntopp/nocloud-proto/billing"
@@ -113,25 +113,13 @@ func ManualRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data m
 	lastMonitoringValue = utils.AlignPaymentDate(lastMonitoringValue, lastMonitoringValue+period, period)
 	instData["last_monitoring"] = structpb.NewNumberValue(float64(lastMonitoringValue))
 
-	var configAddons, productAddons []any
-	config := inst.GetConfig()
-	if config != nil {
-		configAddons = config["addons"].GetListValue().AsSlice()
-	}
-
-	meta := billingPlan.GetProducts()[instProduct].GetMeta()
-	if meta != nil {
-		productAddons = meta["addons"].GetListValue().AsSlice()
-	}
-
-	for _, resource := range billingPlan.Resources {
-		var key any = resource.GetKey()
-		if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
-			if lm, ok := instData[resource.GetKey()+"_last_monitoring"]; ok {
-				lmVal := lm.GetNumberValue()
-				lmVal = float64(utils.AlignPaymentDate(int64(lmVal), int64(lmVal)+resource.GetPeriod(), resource.GetPeriod()))
-				instData[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(lmVal)
-			}
+	for _, addonId := range inst.Addons {
+		key := fmt.Sprintf("addon_%s_last_monitoring", addonId)
+		lmValue, ok := instData[key]
+		if ok {
+			lm := int64(lmValue.GetNumberValue())
+			lm = utils.AlignPaymentDate(lm, lm+period, period)
+			instData[key] = structpb.NewNumberValue(float64(lm))
 		}
 	}
 
@@ -163,25 +151,13 @@ func CancelRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data m
 	lastMonitoringValue = utils.AlignPaymentDate(lastMonitoringValue, lastMonitoringValue-period, period)
 	instData["last_monitoring"] = structpb.NewNumberValue(float64(lastMonitoringValue))
 
-	var configAddons, productAddons []any
-	config := inst.GetConfig()
-	if config != nil {
-		configAddons = config["addons"].GetListValue().AsSlice()
-	}
-
-	meta := billingPlan.GetProducts()[instProduct].GetMeta()
-	if meta != nil {
-		productAddons = meta["addons"].GetListValue().AsSlice()
-	}
-
-	for _, resource := range billingPlan.Resources {
-		var key any = resource.GetKey()
-		if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
-			if lm, ok := instData[resource.GetKey()+"_last_monitoring"]; ok {
-				lmVal := lm.GetNumberValue()
-				lmVal = float64(utils.AlignPaymentDate(int64(lmVal), int64(lmVal)-resource.GetPeriod(), resource.GetPeriod()))
-				instData[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(lmVal)
-			}
+	for _, addonId := range inst.Addons {
+		key := fmt.Sprintf("addon_%s_last_monitoring", addonId)
+		lmValue, ok := instData[key]
+		if ok {
+			lm := int64(lmValue.GetNumberValue())
+			lm = utils.AlignPaymentDate(lm, lm-period, period)
+			instData[key] = structpb.NewNumberValue(float64(lm))
 		}
 	}
 
