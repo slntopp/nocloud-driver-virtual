@@ -3,6 +3,8 @@ package server
 import (
 	"errors"
 	"fmt"
+	"github.com/slntopp/nocloud-driver-virtual/internal/utils"
+	"maps"
 	"math"
 	"slices"
 	"time"
@@ -69,6 +71,10 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 	log.Debug("Initializing")
 
 	status := i.GetStatus()
+
+	// Create copy of instance data
+	var dataCopy = map[string]*structpb.Value{}
+	maps.Copy(dataCopy, i.Data)
 
 	if statespb.NoCloudState_PENDING == i.GetState().GetState() {
 		log.Info("Instance state is init. No instance billing", zap.String("uuid", i.GetUuid()))
@@ -194,6 +200,8 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 				Key:  "instance_suspended",
 				Data: map[string]*structpb.Value{},
 			})
+
+			utils.SendActualMonitoringData(dataCopy, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
 		}
 	} else {
 		log.Debug("NOT SUS")
@@ -217,6 +225,8 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 					Data: map[string]*structpb.Value{},
 				})
 			}
+
+			utils.SendActualMonitoringData(dataCopy, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
 			return
 		}
 
@@ -237,9 +247,7 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 		}
 		s._handleEvent(i)
 		s.HandlePublishRecords(records)
-		s.HandlePublishInstanceData(&instances.ObjectData{
-			Uuid: i.GetUuid(), Data: i.Data,
-		})
+		utils.SendActualMonitoringData(i.Data, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
 	}
 }
 
@@ -424,9 +432,7 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 		log.Debug("Resulting billing", zap.Any("records", records))
 		s.HandlePublishRecords(records)
 		s._handleEvent(i)
-		s.HandlePublishInstanceData(&instances.ObjectData{
-			Uuid: i.GetUuid(), Data: i.Data,
-		})
+		utils.SendActualMonitoringData(i.Data, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
 	}
 }
 
@@ -527,10 +533,7 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 			"price": structpb.NewNumberValue(price),
 		},
 	})
-	s.HandlePublishInstanceData(&instances.ObjectData{
-		Uuid: inst.GetUuid(),
-		Data: instData,
-	})
+	utils.SendActualMonitoringData(instData, instData, inst.GetUuid(), s.HandlePublishInstanceData)
 	return nil
 }
 
