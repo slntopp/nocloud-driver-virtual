@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"time"
 
 	"github.com/slntopp/nocloud-driver-virtual/internal/actions"
 
@@ -33,6 +34,8 @@ func (s *VirtualDriver) Invoke(ctx context.Context, req *pb.InvokeRequest) (*ipb
 		}
 
 		if method == "manual_renew" {
+			time.Sleep(time.Duration(4) * time.Second)
+			return &ipb.InvokeResponse{Result: true}, nil
 			err := s._handleRenewBilling(instance)
 			if err != nil {
 				return &ipb.InvokeResponse{Result: false}, err
