@@ -345,10 +345,7 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 		}
 
 		s._handleEvent(i)
-		s.HandlePublishInstanceData(&instances.ObjectData{
-			Uuid: i.GetUuid(),
-			Data: i.Data,
-		})
+		utils.SendActualMonitoringData(i.Data, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
 	} else {
 		plan := i.GetBillingPlan()
 		if plan == nil {
