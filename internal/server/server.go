@@ -179,7 +179,7 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 	for _, group := range req.GetGroups() {
 		log.Debug("Monitoring Group", zap.String("uuid", group.GetUuid()), zap.String("title", group.GetTitle()), zap.Int("instances", len(group.GetInstances())))
 		for _, i := range group.GetInstances() {
-			log.Debug("Monitoring Instance", zap.String("uuid", i.GetUuid()), zap.String("title", i.GetTitle()))
+			log.Debug("Monitoring Instance", zap.String("uuid", i.GetUuid()), zap.String("title", i.GetTitle()), zap.Any("body", i))
 
 			if i.GetData() == nil {
 				i.Data = make(map[string]*structpb.Value)
