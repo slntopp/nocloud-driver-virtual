@@ -576,7 +576,7 @@ func handleOneTimePayment(log *zap.Logger, i *instances.Instance, last int64, pr
 	var records []*billing.Record
 
 	records = append(records, &billing.Record{
-		Product:  *i.Product,
+		Product:  i.GetProduct(),
 		Instance: i.GetUuid(),
 		Start:    last, End: last + 1, Exec: last,
 		Priority: priority,
