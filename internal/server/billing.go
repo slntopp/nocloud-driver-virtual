@@ -44,7 +44,7 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, addons map
 		return
 	}
 
-	plan := i.GetBillingPlan()
+	plan := i.BillingPlan
 	if plan == nil {
 		log.Debug("Instance has no Billing Plan")
 		return
@@ -72,7 +72,7 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, addons map
 		var last int64
 		var priority billing.Priority
 
-		product, ok := i.BillingPlan.Products[i.GetProduct()]
+		product, ok := i.BillingPlan.GetProducts()[i.GetProduct()]
 		if !ok {
 			log.Warn("Product not found", zap.String("product", *i.Product))
 		}
@@ -291,7 +291,7 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 			Data: i.Data,
 		})
 	} else {
-		plan := i.GetBillingPlan()
+		plan := i.BillingPlan
 		if plan == nil {
 			log.Debug("Instance has no Billing Plan")
 			return
@@ -567,7 +567,7 @@ func (s *VirtualDriver) _handleEvent(i *instances.Instance) {
 func handleOneTimePayment(log *zap.Logger, i *instances.Instance, last int64, priority billing.Priority) []*billing.Record {
 	log.Debug("Handling Static Billing", zap.Int64("last", last))
 	log.Debug("instance body", zap.Any("body", i))
-	_, ok := i.BillingPlan.Products[*i.Product]
+	_, ok := i.BillingPlan.GetProducts()[i.GetProduct()]
 	if !ok {
 		log.Warn("Product not found", zap.String("product", *i.Product))
 		return nil
