@@ -138,7 +138,10 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, addons map
 
 			if product.GetKind() == billing.Kind_POSTPAID {
 				end := last + product.GetPeriod()
-				end = utils.AlignPaymentDate(last, end, product.GetPeriod())
+
+				if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+					end = utils.AlignPaymentDate(last, end, product.GetPeriod())
+				}
 
 				i.Data["next_payment_date"] = structpb.NewNumberValue(float64(end))
 			} else {
@@ -444,7 +447,11 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 			lm = int64(lmValue.GetNumberValue())
 		}
 
-		end := utils.AlignPaymentDate(lm, lm+prod.GetPeriod(), prod.GetPeriod())
+		end = lm + prod.GetPeriod()
+		if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+			end = utils.AlignPaymentDate(lm, end, prod.GetPeriod())
+		}
+
 		inst.Data[fmt.Sprintf("addon_%s_last_monitoring", addonId)] = structpb.NewNumberValue(float64(end))
 		records = append(records, &billing.Record{
 			Start:    lm,
