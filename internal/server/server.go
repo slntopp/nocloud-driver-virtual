@@ -18,6 +18,7 @@ package server
 import (
 	"context"
 	"fmt"
+	eventpb "github.com/slntopp/nocloud-proto/events"
 	"time"
 
 	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
@@ -201,6 +202,15 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 				if autoStart || cfgAutoStart {
 					i.State = &stpb.State{
 						State: stpb.NoCloudState_RUNNING,
+					}
+					if _, ok := i.GetData()["start"]; !ok {
+						s.HandlePublishEvent(&eventpb.Event{
+							Uuid: i.GetUuid(),
+							Key:  "instance_created",
+							Data: map[string]*structpb.Value{
+								"type": structpb.NewStringValue("server"),
+							},
+						})
 					}
 					i.Data["start"] = structpb.NewNumberValue(float64(time.Now().Unix()))
 					s.HandlePublishInstanceData(&ipb.ObjectData{
