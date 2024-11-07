@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/slntopp/nocloud-driver-virtual/internal/utils"
 	"maps"
-	"math"
 	"slices"
 	"time"
 
