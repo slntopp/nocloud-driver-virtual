@@ -168,9 +168,6 @@ func CancelRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data m
 		}
 	}
 
-	iPub(&ipb.ObjectData{
-		Uuid: inst.GetUuid(),
-		Data: instData,
-	})
+	utils.SendActualMonitoringData(instData, instData, inst.GetUuid(), iPub)
 	return &ipb.InvokeResponse{Result: true}, nil
 }

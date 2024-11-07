@@ -22,6 +22,7 @@ import (
 	"time"
 
 	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
+	epb "github.com/slntopp/nocloud-proto/events"
 	ipb "github.com/slntopp/nocloud-proto/instances"
 	sppb "github.com/slntopp/nocloud-proto/services_providers"
 	stpb "github.com/slntopp/nocloud-proto/states"
@@ -177,6 +178,10 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 	sp := req.GetServicesProvider()
 	log.Info("Starting Routine", zap.String("sp", sp.GetUuid()))
 
+	if req.GetBalance() == nil {
+		req.Balance = make(map[string]float64)
+	}
+
 	for _, group := range req.GetGroups() {
 		log.Debug("Monitoring Group", zap.String("uuid", group.GetUuid()), zap.String("title", group.GetTitle()), zap.Int("instances", len(group.GetInstances())))
 		for _, i := range group.GetInstances() {
@@ -185,6 +190,10 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 			if i.GetData() == nil {
 				i.Data = make(map[string]*structpb.Value)
 			}
+			if i.GetConfig() == nil {
+				i.Config = make(map[string]*structpb.Value)
+			}
+
 			instConfig := i.GetConfig()
 
 			stateNil := i.GetState() == nil
@@ -198,6 +207,8 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 
 				cfgAutoStart := instConfig["auto_start"].GetBoolValue()
 				autoStart := bpMeta["auto_start"].GetBoolValue()
+
+				log.Debug("Start", zap.Bool("meta", autoStart), zap.Bool("cfg", cfgAutoStart))
 
 				if autoStart || cfgAutoStart {
 					i.State = &stpb.State{
@@ -220,6 +231,18 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 				} else {
 					i.State = &stpb.State{
 						State: stpb.NoCloudState_PENDING,
+					}
+
+					if !i.GetData()["pending_notification"].GetBoolValue() {
+						go s.HandlePublishEvent(&epb.Event{
+							Uuid: i.GetUuid(),
+							Key:  "pending_notification",
+						})
+						i.Data["pending_notification"] = structpb.NewBoolValue(true)
+						go s.HandlePublishInstanceData(&ipb.ObjectData{
+							Uuid: i.GetUuid(),
+							Data: i.GetData(),
+						})
 					}
 				}
 
@@ -261,11 +284,13 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 
 			log.Debug("Cfg", zap.String("uuid", i.GetUuid()), zap.Any("cfg", instConfig))
 
+			balance := req.GetBalance()[group.GetUuid()]
 			if autoRenew {
 				go s._handleInstanceBilling(i, req.Addons)
 			} else {
 				go s._handleNonRegularBilling(i, req.Addons)
 			}
+			req.Balance[group.GetUuid()] = balance
 		}
 	}
 

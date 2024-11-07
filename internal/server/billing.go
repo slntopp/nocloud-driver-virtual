@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/slntopp/nocloud-driver-virtual/internal/utils"
+	"maps"
+	"math"
 	"slices"
 	"time"
 
@@ -33,11 +35,15 @@ var notificationsPeriods = []ExpiryDiff{
 	{2592000, 30},
 }
 
-func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, addons map[string]*apb.Addon) {
+func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *float64, addons map[string]*apb.Addon) {
 	log := s.log.Named("BillingHandler").Named(i.GetUuid())
 	log.Debug("Initializing")
 
 	status := i.GetStatus()
+
+	// Create copy of instance data
+	var dataCopy = map[string]*structpb.Value{}
+	maps.Copy(dataCopy, i.Data)
 
 	if statespb.NoCloudState_PENDING == i.GetState().GetState() {
 		log.Info("Instance state is init. No instance billing", zap.String("uuid", i.GetUuid()))
@@ -165,6 +171,8 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, addons map
 				Key:  "instance_suspended",
 				Data: map[string]*structpb.Value{},
 			})
+
+			utils.SendActualMonitoringData(dataCopy, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
 		}
 	} else {
 		log.Debug("NOT SUS")
@@ -173,6 +181,27 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, addons map
 			price += rec.GetTotal()
 		}
 
+		if price > *balance {
+			if i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
+				go s.HandlePublishInstanceState(&statespb.ObjectState{
+					Uuid: i.GetUuid(),
+					State: &statespb.State{
+						State: statespb.NoCloudState_SUSPENDED,
+					},
+				})
+
+				go s.HandlePublishEvent(&epb.Event{
+					Uuid: i.GetUuid(),
+					Key:  "instance_suspended",
+					Data: map[string]*structpb.Value{},
+				})
+			}
+
+			utils.SendActualMonitoringData(dataCopy, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
+			return
+		}
+
+		*balance -= price
 		if i.GetState().GetState() == statespb.NoCloudState_SUSPENDED {
 			go s.HandlePublishInstanceState(&statespb.ObjectState{
 				Uuid: i.GetUuid(),
@@ -189,9 +218,7 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, addons map
 		}
 		s._handleEvent(i)
 		s.HandlePublishRecords(records)
-		s.HandlePublishInstanceData(&instances.ObjectData{
-			Uuid: i.GetUuid(), Data: i.Data,
-		})
+		utils.SendActualMonitoringData(i.Data, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
 	}
 }
 
@@ -289,10 +316,7 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 		}
 
 		s._handleEvent(i)
-		s.HandlePublishInstanceData(&instances.ObjectData{
-			Uuid: i.GetUuid(),
-			Data: i.Data,
-		})
+		utils.SendActualMonitoringData(i.Data, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
 	} else {
 		plan := i.BillingPlan
 		if plan == nil {
@@ -379,9 +403,7 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 		log.Debug("Resulting billing", zap.Any("records", records))
 		s.HandlePublishRecords(records)
 		s._handleEvent(i)
-		s.HandlePublishInstanceData(&instances.ObjectData{
-			Uuid: i.GetUuid(), Data: i.Data,
-		})
+		utils.SendActualMonitoringData(i.Data, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
 	}
 }
 
@@ -479,10 +501,7 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 			"price": structpb.NewNumberValue(price),
 		},
 	})
-	s.HandlePublishInstanceData(&instances.ObjectData{
-		Uuid: inst.GetUuid(),
-		Data: instData,
-	})
+	utils.SendActualMonitoringData(instData, instData, inst.GetUuid(), s.HandlePublishInstanceData)
 	return nil
 }
 
