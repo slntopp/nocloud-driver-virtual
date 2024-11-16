@@ -113,8 +113,13 @@ func FreeRenew(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.I
 	}
 	lastMonitoringValue := int64(lastMonitoring.GetNumberValue())
 
-	period := billingPlan.GetProducts()[instProduct].GetPeriod()
-	pkind := billingPlan.GetProducts()[instProduct].GetPeriodKind()
+	product, ok := billingPlan.GetProducts()[instProduct]
+	if !ok {
+		log.Error("Product not found")
+		return &ipb.InvokeResponse{Result: false}, status.Error(codes.Internal, "Product not found")
+	}
+	period := product.GetPeriod()
+	pkind := product.GetPeriodKind()
 
 	end := lastMonitoringValue + period
 	if pkind != billingpb.PeriodKind_DEFAULT {
