@@ -3,6 +3,7 @@ package actions
 import (
 	"fmt"
 	"github.com/slntopp/nocloud-driver-virtual/internal/utils"
+	"go.uber.org/zap"
 	"time"
 
 	billingpb "github.com/slntopp/nocloud-proto/billing"
@@ -17,7 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-type ServiceAction func(states.Pub, instances.Pub, *ipb.Instance, map[string]*structpb.Value) (*ipb.InvokeResponse, error)
+type ServiceAction func(*zap.Logger, states.Pub, instances.Pub, *ipb.Instance, map[string]*structpb.Value) (*ipb.InvokeResponse, error)
 
 var SrvActions = map[string]ServiceAction{
 	"change_state": ChangeState,
@@ -32,7 +33,7 @@ var BillingActions = map[string]ServiceAction{
 	"free_renew":   FreeRenew,
 }
 
-func ChangeState(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+func ChangeState(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
 	state := int32(data["state"].GetNumberValue())
 	statepb := stpb.NoCloudState(state)
 
@@ -68,7 +69,7 @@ func ChangeState(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data m
 	}, nil
 }
 
-func Freeze(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+func Freeze(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
 	inst.Data["freeze"] = structpb.NewBoolValue(true)
 	iPub(&ipb.ObjectData{
 		Uuid: inst.GetUuid(),
@@ -80,7 +81,7 @@ func Freeze(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[st
 	}, nil
 }
 
-func Unfreeze(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+func Unfreeze(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
 	inst.Data["freeze"] = structpb.NewBoolValue(false)
 	iPub(&ipb.ObjectData{
 		Uuid: inst.GetUuid(),
@@ -92,18 +93,22 @@ func Unfreeze(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[
 	}, nil
 }
 
-func FreeRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+func FreeRenew(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+	log.Info("Request received")
+
 	instData := inst.GetData()
 	instProduct := inst.GetProduct()
 	billingPlan := inst.GetBillingPlan()
 
 	kind := billingPlan.GetKind()
 	if kind != billingpb.PlanKind_STATIC {
+		log.Info("Not implemented for dynamic plan")
 		return &ipb.InvokeResponse{Result: false}, status.Error(codes.Internal, "Not implemented for dynamic plan")
 	}
 
 	lastMonitoring, ok := instData["last_monitoring"]
 	if !ok {
+		log.Error("No last_monitoring data")
 		return &ipb.InvokeResponse{Result: false}, status.Error(codes.Internal, "No last_monitoring data")
 	}
 	lastMonitoringValue := int64(lastMonitoring.GetNumberValue())
@@ -130,14 +135,16 @@ func FreeRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map
 		}
 	}
 
+	log.Info("Publishing renewed instance data")
 	iPub(&ipb.ObjectData{
 		Uuid: inst.GetUuid(),
 		Data: instData,
 	})
+	log.Info("Finished")
 	return &ipb.InvokeResponse{Result: true}, nil
 }
 
-func CancelRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+func CancelRenew(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
 	instData := inst.GetData()
 	instProduct := inst.GetProduct()
 	billingPlan := inst.GetBillingPlan()
