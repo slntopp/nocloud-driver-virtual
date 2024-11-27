@@ -1,8 +1,9 @@
 package actions
 
 import (
+	"fmt"
 	"github.com/slntopp/nocloud-driver-virtual/internal/utils"
-	"slices"
+	"go.uber.org/zap"
 	"time"
 
 	billingpb "github.com/slntopp/nocloud-proto/billing"
@@ -17,19 +18,22 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-type ServiceAction func(states.Pub, instances.Pub, *ipb.Instance, map[string]*structpb.Value) (*ipb.InvokeResponse, error)
+type ServiceAction func(*zap.Logger, states.Pub, instances.Pub, *ipb.Instance, map[string]*structpb.Value) (*ipb.InvokeResponse, error)
 
 var SrvActions = map[string]ServiceAction{
 	"change_state": ChangeState,
 	"freeze":       Freeze,
 	"unfreeze":     Unfreeze,
+	"cancel_renew": CancelRenew,
 }
 
 var BillingActions = map[string]ServiceAction{
-	"manual_renew": ManualRenew,
+	"manual_renew": nil,
+	"cancel_renew": CancelRenew,
+	"free_renew":   FreeRenew,
 }
 
-func ChangeState(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+func ChangeState(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
 	state := int32(data["state"].GetNumberValue())
 	statepb := stpb.NoCloudState(state)
 
@@ -65,7 +69,7 @@ func ChangeState(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data m
 	}, nil
 }
 
-func Freeze(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+func Freeze(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
 	inst.Data["freeze"] = structpb.NewBoolValue(true)
 	iPub(&ipb.ObjectData{
 		Uuid: inst.GetUuid(),
@@ -77,7 +81,7 @@ func Freeze(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[st
 	}, nil
 }
 
-func Unfreeze(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+func Unfreeze(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
 	inst.Data["freeze"] = structpb.NewBoolValue(false)
 	iPub(&ipb.ObjectData{
 		Uuid: inst.GetUuid(),
@@ -89,7 +93,63 @@ func Unfreeze(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[
 	}, nil
 }
 
-func ManualRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+func FreeRenew(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
+	log.Info("Request received")
+
+	instData := inst.GetData()
+	instProduct := inst.GetProduct()
+	billingPlan := inst.GetBillingPlan()
+
+	kind := billingPlan.GetKind()
+	if kind != billingpb.PlanKind_STATIC {
+		log.Info("Not implemented for dynamic plan")
+		return &ipb.InvokeResponse{Result: false}, status.Error(codes.Internal, "Not implemented for dynamic plan")
+	}
+
+	lastMonitoring, ok := instData["last_monitoring"]
+	if !ok {
+		log.Error("No last_monitoring data")
+		return &ipb.InvokeResponse{Result: false}, status.Error(codes.Internal, "No last_monitoring data")
+	}
+	lastMonitoringValue := int64(lastMonitoring.GetNumberValue())
+
+	product, ok := billingPlan.GetProducts()[instProduct]
+	if !ok {
+		log.Error("Product not found")
+		return &ipb.InvokeResponse{Result: false}, status.Error(codes.Internal, "Product not found")
+	}
+	period := product.GetPeriod()
+	pkind := product.GetPeriodKind()
+
+	end := lastMonitoringValue + period
+	if pkind != billingpb.PeriodKind_DEFAULT {
+		end = utils.AlignPaymentDate(lastMonitoringValue, end, period)
+	}
+	instData["last_monitoring"] = structpb.NewNumberValue(float64(end))
+
+	for _, addonId := range inst.Addons {
+		key := fmt.Sprintf("addon_%s_last_monitoring", addonId)
+		lmValue, ok := instData[key]
+		if ok {
+			lm := int64(lmValue.GetNumberValue())
+			end := lm + period
+			if pkind != billingpb.PeriodKind_DEFAULT {
+				end = utils.AlignPaymentDate(lm, end, period)
+			}
+			instData[key] = structpb.NewNumberValue(float64(end))
+		}
+	}
+
+	log.Info("Publishing renewed instance data")
+	iPub(&ipb.ObjectData{
+		Uuid: inst.GetUuid(),
+		Data: instData,
+	})
+	log.Info("Finished")
+	return &ipb.InvokeResponse{Result: true}, nil
+}
+
+func CancelRenew(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
 	instData := inst.GetData()
 	instProduct := inst.GetProduct()
 	billingPlan := inst.GetBillingPlan()
@@ -107,28 +167,16 @@ func ManualRenew(sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data m
 
 	period := billingPlan.GetProducts()[instProduct].GetPeriod()
 
-	lastMonitoringValue += period
+	lastMonitoringValue = utils.AlignPaymentDate(lastMonitoringValue, lastMonitoringValue-period, period)
 	instData["last_monitoring"] = structpb.NewNumberValue(float64(lastMonitoringValue))
 
-	var configAddons, productAddons []any
-	config := inst.GetConfig()
-	if config != nil {
-		configAddons = config["addons"].GetListValue().AsSlice()
-	}
-
-	meta := billingPlan.GetProducts()[instProduct].GetMeta()
-	if meta != nil {
-		productAddons = meta["addons"].GetListValue().AsSlice()
-	}
-
-	for _, resource := range billingPlan.Resources {
-		var key any = resource.GetKey()
-		if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
-			if lm, ok := instData[resource.GetKey()+"_last_monitoring"]; ok {
-				lmVal := lm.GetNumberValue()
-				lmVal += float64(resource.GetPeriod())
-				instData[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(lmVal)
-			}
+	for _, addonId := range inst.Addons {
+		key := fmt.Sprintf("addon_%s_last_monitoring", addonId)
+		lmValue, ok := instData[key]
+		if ok {
+			lm := int64(lmValue.GetNumberValue())
+			lm = utils.AlignPaymentDate(lm, lm-period, period)
+			instData[key] = structpb.NewNumberValue(float64(lm))
 		}
 	}
 

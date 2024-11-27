@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-
 	"github.com/slntopp/nocloud-driver-virtual/internal/actions"
 
 	accesspb "github.com/slntopp/nocloud-proto/access"
@@ -15,10 +14,11 @@ import (
 )
 
 func (s *VirtualDriver) Invoke(ctx context.Context, req *pb.InvokeRequest) (*ipb.InvokeResponse, error) {
-	s.log.Debug("Invoke request received", zap.Any("action", req.Method))
-
 	method := req.GetMethod()
 	instance := req.GetInstance()
+
+	log := s.log.With(zap.String("instance", instance.GetUuid()), zap.String("method", method))
+	log.Debug("Invoke request received", zap.Any("action", req.Method))
 
 	if instance.GetAccess().GetLevel() < accesspb.Level_ROOT {
 		return nil, status.Errorf(codes.PermissionDenied, "Action %s is admin action", method)
@@ -27,19 +27,22 @@ func (s *VirtualDriver) Invoke(ctx context.Context, req *pb.InvokeRequest) (*ipb
 	action, ok := actions.SrvActions[method]
 
 	if !ok {
-		_, ok = actions.BillingActions[method]
+		action, ok = actions.BillingActions[method]
 		if !ok {
 			return nil, status.Errorf(codes.PermissionDenied, "Action %s is admin action", method)
 		}
 
-		err := s._handleRenewBilling(instance)
-
-		if err != nil {
-			return &ipb.InvokeResponse{Result: false}, err
+		if method == "manual_renew" {
+			err := s._handleRenewBilling(instance)
+			if err != nil {
+				return &ipb.InvokeResponse{Result: false}, err
+			}
+		} else {
+			return action(log, s.HandlePublishInstanceState, s.HandlePublishInstanceData, instance, req.GetParams())
 		}
 
 		return &ipb.InvokeResponse{Result: true}, nil
 	} else {
-		return action(s.HandlePublishInstanceState, s.HandlePublishInstanceData, instance, req.GetParams())
+		return action(log, s.HandlePublishInstanceState, s.HandlePublishInstanceData, instance, req.GetParams())
 	}
 }

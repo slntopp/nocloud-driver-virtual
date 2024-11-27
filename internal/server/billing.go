@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"github.com/slntopp/nocloud-driver-virtual/internal/utils"
 	"maps"
-	"math"
 	"slices"
 	"time"
 
 	"github.com/slntopp/nocloud-proto/billing"
+	apb "github.com/slntopp/nocloud-proto/billing/addons"
 	epb "github.com/slntopp/nocloud-proto/events"
 	"github.com/slntopp/nocloud-proto/instances"
 	statespb "github.com/slntopp/nocloud-proto/states"
@@ -34,39 +34,7 @@ var notificationsPeriods = []ExpiryDiff{
 	{2592000, 30},
 }
 
-func AlignPaymentDate(start int64, end int64, period int64) int64 {
-	// Apply only on month period
-	if period != 30*86400 {
-		return end
-	}
-
-	daysInMonth := func(year int, month time.Month) int {
-		return time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
-	}
-
-	startTime := time.Unix(start, 0).In(time.UTC)
-	dayStart := startTime.Day()
-	daysInMonthStart := daysInMonth(startTime.Year(), startTime.Month())
-	endTime := time.Unix(end, 0).In(time.UTC)
-	yearAfterStartDate := startTime.AddDate(0, 0, daysInMonthStart-startTime.Day()+1).Year()
-	monthAfterStartDate := startTime.AddDate(0, 0, daysInMonthStart-startTime.Day()+1).Month()
-	daysInMonthEnd := daysInMonth(yearAfterStartDate, monthAfterStartDate)
-
-	// Happens when start is 1st day in 31day month
-	if startTime.Month() == endTime.Month() {
-		return startTime.AddDate(0, 1, 0).Unix()
-	}
-
-	// Default case, just add month
-	if dayStart <= daysInMonthEnd {
-		return startTime.AddDate(0, 1, 0).Unix()
-	}
-
-	// Overlapping case. Add month and subtract days
-	return startTime.AddDate(0, 1, daysInMonthEnd-dayStart).Unix()
-}
-
-func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *float64) {
+func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *float64, addons map[string]*apb.Addon) {
 	log := s.log.Named("BillingHandler").Named(i.GetUuid())
 	log.Debug("Initializing")
 
@@ -81,7 +49,7 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 		return
 	}
 
-	plan := i.GetBillingPlan()
+	plan := i.BillingPlan
 	if plan == nil {
 		log.Debug("Instance has no Billing Plan")
 		return
@@ -109,46 +77,45 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 		var last int64
 		var priority billing.Priority
 
-		var configAddons, productAddons []any
-
-		if config != nil {
-			configAddons = config["addons"].GetListValue().AsSlice()
+		product, ok := i.BillingPlan.GetProducts()[i.GetProduct()]
+		if !ok {
+			log.Warn("Product not found", zap.String("product", *i.Product))
 		}
+		for _, addonId := range i.GetAddons() {
+			addon, ok := addons[addonId]
+			if !ok {
+				log.Warn("Addon not found", zap.String("addon", addonId))
+				continue
+			}
 
-		meta := product.GetMeta()
-		if meta != nil {
-			productAddons = meta["addons"].GetListValue().AsSlice()
-		}
+			var (
+				lm       int64
+				priority billing.Priority
+			)
+			lmValue, ok := i.Data[fmt.Sprintf("addon_%s_last_monitoring", addonId)]
+			if !ok {
+				lm = i.Created
+				priority = billing.Priority_URGENT
+			} else {
+				lm = int64(lmValue.GetNumberValue())
+				priority = billing.Priority_NORMAL
+			}
 
-		for _, resource := range plan.Resources {
-			var key any = resource.GetKey()
-			if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
-				_, ok := i.Data[resource.GetKey()+"_last_monitoring"]
-
-				if ok {
-					last = int64(i.Data[resource.GetKey()+"_last_monitoring"].GetNumberValue())
-				} else {
-					last = time.Now().Unix()
-				}
-
-				if resource.GetPeriod() == 0 {
+			recs, last := handleAddonBilling(log, i, lm, priority, addon)
+			if len(recs) > 0 {
+				if product.GetPeriod() == 0 {
 					if !ok {
-						if !slices.Contains(skipPayment, key) {
-							records = append(records, handleOneTimeResourcePayment(log, i, resource, last)...)
-						}
-						i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
+						records = append(records, recs...)
+						i.Data[fmt.Sprintf("addon_%s_last_monitoring", addonId)] = structpb.NewNumberValue(float64(last))
 					}
 				} else {
-					capRec, last := handleCapacityBilling(log, i, resource, last)
-					if ok || (!ok && !slices.Contains(skipPayment, key)) {
-						records = append(records, capRec...)
-					}
-					i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
+					records = append(records, recs...)
+					i.Data[fmt.Sprintf("addon_%s_last_monitoring", addonId)] = structpb.NewNumberValue(float64(last))
 				}
 			}
 		}
 
-		_, ok := i.Data["last_monitoring"]
+		_, ok = i.Data["last_monitoring"]
 
 		if ok {
 			last = int64(i.Data["last_monitoring"].GetNumberValue())
@@ -176,7 +143,10 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 
 			if product.GetKind() == billing.Kind_POSTPAID {
 				end := last + product.GetPeriod()
-				end = AlignPaymentDate(last, end, product.GetPeriod())
+
+				if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+					end = utils.AlignPaymentDate(last, end, product.GetPeriod())
+				}
 
 				i.Data["next_payment_date"] = structpb.NewNumberValue(float64(end))
 			} else {
@@ -251,7 +221,7 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 	}
 }
 
-func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
+func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons map[string]*apb.Addon) {
 	log := s.log.Named("NonReg").Named(i.GetUuid())
 	log.Debug("Initializing")
 
@@ -309,7 +279,7 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 			end := lastMonitoringValue + product.GetPeriod()
 
 			if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-				end = AlignPaymentDate(lastMonitoringValue, end, product.GetPeriod())
+				end = utils.AlignPaymentDate(lastMonitoringValue, end, product.GetPeriod())
 			}
 
 			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(end))
@@ -347,7 +317,7 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 		s._handleEvent(i)
 		utils.SendActualMonitoringData(i.Data, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
 	} else {
-		plan := i.GetBillingPlan()
+		plan := i.BillingPlan
 		if plan == nil {
 			log.Debug("Instance has no Billing Plan")
 			return
@@ -361,42 +331,45 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance) {
 			var last int64
 			var priority billing.Priority
 
-			var configAddons, productAddons []any
-			config := i.GetConfig()
-			if config != nil {
-				configAddons = config["addons"].GetListValue().AsSlice()
+			product, ok := i.BillingPlan.Products[i.GetProduct()]
+			if !ok {
+				log.Warn("Product not found", zap.String("product", *i.Product))
 			}
+			for _, addonId := range i.GetAddons() {
+				addon, ok := addons[addonId]
+				if !ok {
+					log.Warn("Addon not found", zap.String("addon", addonId))
+					continue
+				}
 
-			meta := product.GetMeta()
-			if meta != nil {
-				productAddons = meta["addons"].GetListValue().AsSlice()
-			}
+				var (
+					lm       int64
+					priority billing.Priority
+				)
+				lmValue, ok := i.Data[fmt.Sprintf("addon_%s_last_monitoring", addonId)]
+				if !ok {
+					lm = i.Created
+					priority = billing.Priority_URGENT
+				} else {
+					lm = int64(lmValue.GetNumberValue())
+					priority = billing.Priority_NORMAL
+				}
 
-			for _, resource := range plan.Resources {
-				var key any = resource.GetKey()
-				if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
-					_, ok := i.Data[resource.GetKey()+"_last_monitoring"]
-
-					if ok {
-						last = int64(i.Data[resource.GetKey()+"_last_monitoring"].GetNumberValue())
-					} else {
-						last = time.Now().Unix()
-					}
-
-					if resource.GetPeriod() == 0 {
+				recs, last := handleAddonBilling(log, i, lm, priority, addon)
+				if len(recs) > 0 {
+					if product.GetPeriod() == 0 {
 						if !ok {
-							records = append(records, handleOneTimeResourcePayment(log, i, resource, last)...)
-							i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
-						} else {
-							capRec, last := handleCapacityBilling(log, i, resource, last)
-							records = append(records, capRec...)
-							i.Data[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(last))
+							records = append(records, recs...)
+							i.Data[fmt.Sprintf("addon_%s_last_monitoring", addonId)] = structpb.NewNumberValue(float64(last))
 						}
+					} else {
+						records = append(records, recs...)
+						i.Data[fmt.Sprintf("addon_%s_last_monitoring", addonId)] = structpb.NewNumberValue(float64(last))
 					}
 				}
 			}
 
-			_, ok := i.Data["last_monitoring"]
+			_, ok = i.Data["last_monitoring"]
 
 			if ok {
 				last = int64(i.Data["last_monitoring"].GetNumberValue())
@@ -460,7 +433,7 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 	end := start + product.GetPeriod()
 
 	if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-		end = AlignPaymentDate(start, end, product.GetPeriod())
+		end = utils.AlignPaymentDate(start, end, product.GetPeriod())
 	}
 
 	var records []*billing.Record
@@ -473,46 +446,43 @@ func (s *VirtualDriver) _handleRenewBilling(inst *instances.Instance) error {
 		Priority: billing.Priority_URGENT,
 		Instance: inst.GetUuid(),
 		Product:  inst.GetProduct(),
-		Total:    product.GetPrice(),
+		Total:    1,
 	})
 	instData["last_monitoring"] = structpb.NewNumberValue(float64(end))
 
-	var configAddons, productAddons []any
-	config := inst.GetConfig()
-	if config != nil {
-		configAddons = config["addons"].GetListValue().AsSlice()
+	prod, ok := inst.BillingPlan.Products[inst.GetProduct()]
+	if !ok {
+		log.Warn("Product not found", zap.String("product", *inst.Product))
 	}
-
-	meta := billingPlan.GetProducts()[instProduct].GetMeta()
-	if meta != nil {
-		productAddons = meta["addons"].GetListValue().AsSlice()
-	}
-
-	for _, resource := range billingPlan.Resources {
-		var key any = resource.GetKey()
-		if slices.Contains(configAddons, key) && slices.Contains(productAddons, key) {
-			if lm, ok := instData[resource.GetKey()+"_last_monitoring"]; ok {
-				lmVal := lm.GetNumberValue()
-
-				start := int64(lmVal)
-				end := start + resource.GetPeriod()
-
-				if resource.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-					end = AlignPaymentDate(start, end, resource.GetPeriod())
-				}
-
-				records = append(records, &billing.Record{
-					Start:    start,
-					End:      end,
-					Exec:     time.Now().Unix(),
-					Priority: billing.Priority_URGENT,
-					Instance: inst.GetUuid(),
-					Resource: resource.GetKey(),
-					Total:    resource.GetPrice(),
-				})
-				instData[resource.GetKey()+"_last_monitoring"] = structpb.NewNumberValue(float64(end))
-			}
+	for _, addonId := range inst.GetAddons() {
+		if prod.GetPeriod() == 0 {
+			continue
 		}
+		var (
+			lm int64
+		)
+		lmValue, ok := inst.Data[fmt.Sprintf("addon_%s_last_monitoring", addonId)]
+		if !ok {
+			continue
+		} else {
+			lm = int64(lmValue.GetNumberValue())
+		}
+
+		end = lm + prod.GetPeriod()
+		if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+			end = utils.AlignPaymentDate(lm, end, prod.GetPeriod())
+		}
+
+		inst.Data[fmt.Sprintf("addon_%s_last_monitoring", addonId)] = structpb.NewNumberValue(float64(end))
+		records = append(records, &billing.Record{
+			Start:    lm,
+			End:      end,
+			Exec:     time.Now().Unix(),
+			Priority: billing.Priority_URGENT,
+			Instance: inst.GetUuid(),
+			Addon:    addonId,
+			Total:    1,
+		})
 	}
 
 	log.Debug("Final data", zap.Any("data", instData))
@@ -621,7 +591,8 @@ func (s *VirtualDriver) _handleEvent(i *instances.Instance) {
 
 func handleOneTimePayment(log *zap.Logger, i *instances.Instance, last int64, priority billing.Priority) []*billing.Record {
 	log.Debug("Handling Static Billing", zap.Int64("last", last))
-	product, ok := i.BillingPlan.Products[*i.Product]
+	log.Debug("instance body", zap.Any("body", i))
+	_, ok := i.BillingPlan.GetProducts()[i.GetProduct()]
 	if !ok {
 		log.Warn("Product not found", zap.String("product", *i.Product))
 		return nil
@@ -630,11 +601,11 @@ func handleOneTimePayment(log *zap.Logger, i *instances.Instance, last int64, pr
 	var records []*billing.Record
 
 	records = append(records, &billing.Record{
-		Product:  *i.Product,
+		Product:  i.GetProduct(),
 		Instance: i.GetUuid(),
 		Start:    last, End: last + 1, Exec: last,
 		Priority: priority,
-		Total:    math.Round(product.Price*100) / 100.0,
+		Total:    1,
 	})
 
 	return records
@@ -653,14 +624,14 @@ func handleStaticBilling(log *zap.Logger, i *instances.Instance, last int64, pri
 		log.Debug("Handling Postpaid Billing", zap.Any("product", product))
 		for end := last + product.Period; end <= time.Now().Unix(); end += product.Period {
 			if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-				end = AlignPaymentDate(last, end, product.GetPeriod())
+				end = utils.AlignPaymentDate(last, end, product.GetPeriod())
 			}
 			records = append(records, &billing.Record{
 				Product:  *i.Product,
 				Instance: i.GetUuid(),
 				Start:    last, End: end, Exec: last,
 				Priority: billing.Priority_NORMAL,
-				Total:    math.Round(product.Price*100) / 100.0,
+				Total:    1,
 			})
 		}
 	} else {
@@ -668,14 +639,14 @@ func handleStaticBilling(log *zap.Logger, i *instances.Instance, last int64, pri
 		log.Debug("Handling Prepaid Billing", zap.Any("product", product), zap.Int64("end", end), zap.Int64("now", time.Now().Unix()))
 		for ; last <= time.Now().Unix(); end += product.Period {
 			if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-				end = AlignPaymentDate(last, end, product.GetPeriod())
+				end = utils.AlignPaymentDate(last, end, product.GetPeriod())
 			}
 			records = append(records, &billing.Record{
 				Product:  *i.Product,
 				Instance: i.GetUuid(),
 				Start:    last, End: end, Exec: last,
 				Priority: priority,
-				Total:    math.Round(product.Price*100) / 100.0,
+				Total:    1,
 			})
 			last = end
 		}
@@ -692,7 +663,7 @@ func handleOneTimeResourcePayment(log *zap.Logger, i *instances.Instance, res *b
 		Instance: i.GetUuid(),
 		Start:    last, End: last + 1,
 		Exec:  last,
-		Total: res.GetPrice(),
+		Total: 1,
 	})
 
 	return records
@@ -704,28 +675,89 @@ func handleCapacityBilling(log *zap.Logger, i *instances.Instance, res *billing.
 	if res.Kind == billing.Kind_POSTPAID {
 		for end := last + res.Period; end <= time.Now().Unix(); end += res.Period {
 			if res.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-				end = AlignPaymentDate(last, end, res.GetPeriod())
+				end = utils.AlignPaymentDate(last, end, res.GetPeriod())
 			}
 			records = append(records, &billing.Record{
 				Resource: res.Key,
 				Instance: i.GetUuid(),
 				Start:    last, End: end,
 				Exec:  last,
-				Total: res.GetPrice(),
+				Total: 1,
 			})
 			last = end
 		}
 	} else {
 		for end := last + res.Period; last <= time.Now().Unix(); end += res.Period {
 			if res.GetPeriodKind() != billing.PeriodKind_DEFAULT {
-				end = AlignPaymentDate(last, end, res.GetPeriod())
+				end = utils.AlignPaymentDate(last, end, res.GetPeriod())
 			}
 			records = append(records, &billing.Record{
 				Resource: res.Key,
 				Instance: i.GetUuid(),
 				Priority: billing.Priority_URGENT,
 				Start:    last, End: end, Exec: last,
-				Total: res.GetPrice(),
+				Total: 1,
+			})
+			last = end
+		}
+	}
+
+	return records, last
+}
+
+func handleAddonBilling(log *zap.Logger, i *instances.Instance, last int64, priority billing.Priority, addon *apb.Addon) ([]*billing.Record, int64) {
+	log.Debug("Handling Addon Billing", zap.Int64("last", last))
+	product, ok := i.BillingPlan.Products[i.GetProduct()]
+	if !ok {
+		log.Warn("Product not found", zap.String("product", *i.Product), zap.String("addon", addon.GetUuid()))
+		return nil, last
+	}
+	period := product.Period
+
+	var records []*billing.Record
+
+	// Handle one time addon payment
+	if period == 0 {
+		records = append(records, &billing.Record{
+			Addon:    addon.GetUuid(),
+			Instance: i.GetUuid(),
+			Start:    last, End: last + 1, Exec: last,
+			Priority: billing.Priority_URGENT,
+			Total:    1,
+		})
+		return records, last
+	}
+
+	// Handle periodic addon payment
+	if addon.Kind == apb.Kind_POSTPAID {
+		log.Debug("Handling Postpaid Billing", zap.Any("addon", addon.GetUuid()))
+		for end := last + period; end <= time.Now().Unix(); end += period {
+
+			if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+				end = utils.AlignPaymentDate(last, end, period)
+			}
+
+			records = append(records, &billing.Record{
+				Addon:    addon.GetUuid(),
+				Instance: i.GetUuid(),
+				Start:    last, End: end, Exec: last,
+				Priority: billing.Priority_NORMAL,
+				Total:    1,
+			})
+		}
+	} else {
+		end := last + period
+		log.Debug("Handling Prepaid Billing", zap.Any("addon", addon.GetUuid()), zap.Int64("end", end), zap.Int64("now", time.Now().Unix()))
+		for ; last <= time.Now().Unix(); end += period {
+			if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+				end = utils.AlignPaymentDate(last, end, product.Period)
+			}
+			records = append(records, &billing.Record{
+				Addon:    addon.GetUuid(),
+				Instance: i.GetUuid(),
+				Start:    last, End: end, Exec: last,
+				Priority: priority,
+				Total:    1,
 			})
 			last = end
 		}

@@ -17,6 +17,8 @@ package server
 
 import (
 	"context"
+	"fmt"
+	eventpb "github.com/slntopp/nocloud-proto/events"
 	"time"
 
 	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
@@ -84,6 +86,48 @@ func (s *VirtualDriver) TestInstancesGroupConfig(ctx context.Context, req *ipb.T
 	return &ipb.TestInstancesGroupConfigResponse{Result: true}, nil
 }
 
+func (s *VirtualDriver) GetExpiration(_ context.Context, request *pb.GetExpirationRequest) (*pb.GetExpirationResponse, error) {
+	log := s.log.Named("GetExpiration")
+	records := make([]*pb.ExpirationRecord, 0)
+	inst := request.GetInstance()
+	bp := inst.GetBillingPlan()
+	data := inst.GetData()
+
+	product, hasProduct := bp.GetProducts()[inst.GetProduct()]
+	if hasProduct {
+		if lm, ok := data["last_monitoring"]; ok && product.GetPeriod() > 0 {
+			records = append(records, &pb.ExpirationRecord{
+				Expires: int64(lm.GetNumberValue()),
+				Product: inst.GetProduct(),
+				Period:  product.GetPeriod(),
+			})
+		}
+
+		for _, a := range inst.GetAddons() {
+			if lm, ok := data[fmt.Sprintf("addon_%s_last_monitoring", a)]; ok && product.GetPeriod() > 0 {
+				records = append(records, &pb.ExpirationRecord{
+					Expires: int64(lm.GetNumberValue()),
+					Addon:   a,
+					Period:  product.GetPeriod(),
+				})
+			}
+		}
+	}
+
+	for _, res := range bp.Resources {
+		if lm, ok := data[fmt.Sprintf("%s_last_monitoring", res.GetKey())]; ok && res.GetPeriod() > 0 {
+			records = append(records, &pb.ExpirationRecord{
+				Expires:  int64(lm.GetNumberValue()),
+				Resource: res.GetKey(),
+				Period:   res.GetPeriod(),
+			})
+		}
+	}
+
+	log.Info("Response records", zap.Any("records", records))
+	return &pb.GetExpirationResponse{Records: records}, nil
+}
+
 func (s *VirtualDriver) Up(ctx context.Context, input *pb.UpRequest) (*pb.UpResponse, error) {
 	log := s.log.Named("Up")
 	igroup := input.GetGroup()
@@ -141,7 +185,7 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 	for _, group := range req.GetGroups() {
 		log.Debug("Monitoring Group", zap.String("uuid", group.GetUuid()), zap.String("title", group.GetTitle()), zap.Int("instances", len(group.GetInstances())))
 		for _, i := range group.GetInstances() {
-			log.Debug("Monitoring Instance", zap.String("uuid", i.GetUuid()), zap.String("title", i.GetTitle()))
+			log.Debug("Monitoring Instance", zap.String("uuid", i.GetUuid()), zap.String("title", i.GetTitle()), zap.Any("body", i))
 
 			if i.GetData() == nil {
 				i.Data = make(map[string]*structpb.Value)
@@ -169,6 +213,15 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 				if autoStart || cfgAutoStart {
 					i.State = &stpb.State{
 						State: stpb.NoCloudState_RUNNING,
+					}
+					if _, ok := i.GetData()["start"]; !ok {
+						s.HandlePublishEvent(&eventpb.Event{
+							Uuid: i.GetUuid(),
+							Key:  "instance_created",
+							Data: map[string]*structpb.Value{
+								"type": structpb.NewStringValue("server"),
+							},
+						})
 					}
 					i.Data["start"] = structpb.NewNumberValue(float64(time.Now().Unix()))
 					s.HandlePublishInstanceData(&ipb.ObjectData{
@@ -233,9 +286,9 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 
 			balance := req.GetBalance()[group.GetUuid()]
 			if autoRenew {
-				go s._handleInstanceBilling(i, &balance)
+				go s._handleInstanceBilling(i, &balance, req.Addons)
 			} else {
-				go s._handleNonRegularBilling(i)
+				go s._handleNonRegularBilling(i, req.Addons)
 			}
 			req.Balance[group.GetUuid()] = balance
 		}
