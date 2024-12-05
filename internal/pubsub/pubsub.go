@@ -27,10 +27,16 @@ func SetupRecordsPublisher(logger *zap.Logger, rbmq *amqp.Connection) RecordsPub
 		defer ch.Close()
 
 		qName := "records"
-		_, _ = ch.QueueDeclare(
+		if _, err = ch.QueueDeclare(
 			qName,
 			true, false, false, true, nil,
-		)
+		); err != nil {
+			ch, err = rbmq.Channel()
+			if err != nil {
+				log.Fatal("Failed to open a channel", zap.Error(err))
+			}
+			defer ch.Close()
+		}
 
 		for _, record := range payload {
 			body, err := proto.Marshal(record)
