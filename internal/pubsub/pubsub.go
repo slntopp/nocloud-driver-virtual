@@ -62,17 +62,18 @@ func SetupEventsPublisher(logger *zap.Logger, rbmq *amqp.Connection) EventPublis
 		}
 		defer ch.Close()
 
-		queue, _ := ch.QueueDeclare(
-			"events",
-			true, false, false, true, nil,
-		)
+		qName := "events"
+		//queue, _ := ch.QueueDeclare(
+		//	"events",
+		//	true, false, false, true, nil,
+		//)
 
 		body, err := proto.Marshal(event)
 		if err != nil {
 			log.Error("Error while marshalling record", zap.Error(err))
 			return
 		}
-		err = ch.PublishWithContext(context.Background(), "", queue.Name, false, false, amqp.Publishing{
+		err = ch.PublishWithContext(context.Background(), "", qName, false, false, amqp.Publishing{
 			ContentType: "text/plain", Body: body,
 		})
 		if err != nil {
