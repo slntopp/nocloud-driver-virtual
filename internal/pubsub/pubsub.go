@@ -26,8 +26,9 @@ func SetupRecordsPublisher(logger *zap.Logger, rbmq *amqp.Connection) RecordsPub
 		}
 		defer ch.Close()
 
-		queue, _ := ch.QueueDeclare(
-			"records",
+		qName := "records"
+		_, _ = ch.QueueDeclare(
+			qName,
 			true, false, false, true, nil,
 		)
 
@@ -37,7 +38,7 @@ func SetupRecordsPublisher(logger *zap.Logger, rbmq *amqp.Connection) RecordsPub
 				log.Error("Error while marshalling record", zap.Error(err))
 				continue
 			}
-			err = ch.PublishWithContext(context.Background(), "", queue.Name, false, false, amqp.Publishing{
+			err = ch.PublishWithContext(context.Background(), "", qName, false, false, amqp.Publishing{
 				ContentType: "text/plain", Body: body,
 			})
 			if err != nil {
