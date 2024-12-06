@@ -26,10 +26,14 @@ func SetupRecordsPublisher(logger *zap.Logger, rbmq *amqp.Connection) RecordsPub
 		}
 		defer ch.Close()
 
-		queue, _ := ch.QueueDeclare(
-			"records",
-			true, false, false, true, nil,
-		)
+		qName := "records"
+		//if _, err = ch.QueueDeclare(qName, true, false, false, false, nil); err != nil {
+		//	ch, err = rbmq.Channel()
+		//	if err != nil {
+		//		log.Fatal("Failed to open a channel", zap.Error(err))
+		//	}
+		//	defer ch.Close()
+		//}
 
 		for _, record := range payload {
 			body, err := proto.Marshal(record)
@@ -37,7 +41,7 @@ func SetupRecordsPublisher(logger *zap.Logger, rbmq *amqp.Connection) RecordsPub
 				log.Error("Error while marshalling record", zap.Error(err))
 				continue
 			}
-			err = ch.PublishWithContext(context.Background(), "", queue.Name, false, false, amqp.Publishing{
+			err = ch.PublishWithContext(context.Background(), "", qName, false, false, amqp.Publishing{
 				ContentType: "text/plain", Body: body,
 			})
 			if err != nil {
@@ -58,17 +62,18 @@ func SetupEventsPublisher(logger *zap.Logger, rbmq *amqp.Connection) EventPublis
 		}
 		defer ch.Close()
 
-		queue, _ := ch.QueueDeclare(
-			"events",
-			true, false, false, true, nil,
-		)
+		qName := "events"
+		//queue, _ := ch.QueueDeclare(
+		//	"events",
+		//	true, false, false, true, nil,
+		//)
 
 		body, err := proto.Marshal(event)
 		if err != nil {
 			log.Error("Error while marshalling record", zap.Error(err))
 			return
 		}
-		err = ch.PublishWithContext(context.Background(), "", queue.Name, false, false, amqp.Publishing{
+		err = ch.PublishWithContext(context.Background(), "", qName, false, false, amqp.Publishing{
 			ContentType: "text/plain", Body: body,
 		})
 		if err != nil {

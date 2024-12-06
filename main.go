@@ -51,6 +51,7 @@ func init() {
 	RabbitMQConn = viper.GetString("RABBITMQ_CONN")
 }
 
+// dev
 func main() {
 	defer func() {
 		_ = log.Sync()
