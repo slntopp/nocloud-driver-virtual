@@ -16,13 +16,12 @@ limitations under the License.
 package main
 
 import (
-	"fmt"
-	"net"
-
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/slntopp/nocloud-driver-virtual/internal/server"
 	"github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
 	"github.com/slntopp/nocloud/pkg/nocloud"
+	grpc_server "github.com/slntopp/nocloud/pkg/nocloud/grpc"
+	"github.com/slntopp/nocloud/pkg/nocloud/rabbitmq"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -57,23 +56,18 @@ func main() {
 		_ = log.Sync()
 	}()
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
-	if err != nil {
-		log.Fatal("Failed to listen", zap.String("address", port), zap.Error(err))
-	}
-
 	log.Info("Dialing RabbitMQ", zap.String("url", RabbitMQConn))
 	rbmq, err := amqp.Dial(RabbitMQConn)
 	if err != nil {
 		log.Fatal("Failed to connect to RabbitMQ", zap.Error(err))
 	}
 	defer rbmq.Close()
+	rabbitmq.FatalOnConnectionClose(log, rbmq)
 
 	s := grpc.NewServer()
 	srv := server.NewVirtualDriver(log, rbmq, type_key)
 
 	vanilla.RegisterDriverServiceServer(s, srv)
 
-	log.Info(fmt.Sprintf("Serving gRPC on 0.0.0.0:%v", port))
-	log.Fatal("Failed to serve gRPC", zap.Error(s.Serve(lis)))
+	grpc_server.ServeGRPC(log, s, port)
 }

@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"github.com/slntopp/nocloud/pkg/nocloud/rabbitmq"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	billingpb "github.com/slntopp/nocloud-proto/billing"
@@ -85,7 +86,7 @@ func SetupEventsPublisher(logger *zap.Logger, rbmq *amqp.Connection) EventPublis
 
 func SetupSPStatesPublisher(logger *zap.Logger, rbmq *amqp.Connection) s.Pub {
 	log := logger.Named("States")
-	s := s.NewStatesPubSub(log, nil, rbmq)
+	s := s.NewStatesPubSub(log, nil, rabbitmq.NewRabbitMQConnection(rbmq))
 	sch := s.Channel()
 	s.TopicExchange(sch, "states")
 
@@ -94,7 +95,7 @@ func SetupSPStatesPublisher(logger *zap.Logger, rbmq *amqp.Connection) s.Pub {
 
 func SetupInstancesStatesPublisher(logger *zap.Logger, rbmq *amqp.Connection) s.Pub {
 	log := logger.Named("States")
-	s := s.NewStatesPubSub(log, nil, rbmq)
+	s := s.NewStatesPubSub(log, nil, rabbitmq.NewRabbitMQConnection(rbmq))
 	sch := s.Channel()
 	s.TopicExchange(sch, "states")
 
@@ -103,7 +104,7 @@ func SetupInstancesStatesPublisher(logger *zap.Logger, rbmq *amqp.Connection) s.
 
 func SetupInstancesDataPublisher(logger *zap.Logger, rbmq *amqp.Connection) i.Pub {
 	log := logger.Named("Datas")
-	i := i.NewPubSub(log, nil, rbmq)
+	i := i.NewPubSub(log, nil, rabbitmq.NewRabbitMQConnection(rbmq))
 	ich := i.Channel()
 	i.TopicExchange(ich, "datas")
 
