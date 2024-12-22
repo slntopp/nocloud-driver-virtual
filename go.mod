@@ -4,8 +4,8 @@ go 1.21
 
 require (
 	github.com/rabbitmq/amqp091-go v1.9.0
-	github.com/slntopp/nocloud v0.0.19-0.20240725075336-bb1a4b4fe0f0
-	github.com/slntopp/nocloud-proto v0.0.0-20241211074240-7d83526cf522
+	github.com/slntopp/nocloud v0.0.19-0.20241222000954-3003ae4c1b4c
+	github.com/slntopp/nocloud-proto v0.0.0-20241218103715-0ee38a002fda
 	github.com/spf13/viper v1.18.2
 	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.64.0
@@ -16,8 +16,13 @@ require (
 	connectrpc.com/connect v1.14.0 // indirect
 	github.com/arangodb/go-driver v1.6.2 // indirect
 	github.com/arangodb/go-velocypack v0.0.0-20200318135517-5af53c29c67e // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cskr/pubsub v1.0.2 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
+	github.com/go-redis/redis/v8 v8.11.5 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
@@ -40,6 +45,7 @@ require (
 	golang.org/x/crypto v0.21.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
 	golang.org/x/net v0.23.0 // indirect
+	golang.org/x/sync v0.6.0 // indirect
 	golang.org/x/sys v0.20.0 // indirect
 	golang.org/x/text v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240513163218-0867130af1f8 // indirect
