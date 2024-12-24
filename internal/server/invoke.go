@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"github.com/slntopp/nocloud-driver-virtual/internal/actions"
 
 	accesspb "github.com/slntopp/nocloud-proto/access"
@@ -55,4 +56,24 @@ func (s *VirtualDriver) Invoke(ctx context.Context, req *pb.InvokeRequest) (*ipb
 	}
 
 	return nil, status.Errorf(codes.PermissionDenied, "Action %s is admin action", method)
+}
+
+func (s *VirtualDriver) SpInvoke(_ context.Context, req *pb.SpInvokeRequest) (res *ipb.InvokeResponse, err error) {
+	log := s.log.With(zap.String("method", req.Method))
+	log.Debug("Invoke request received", zap.Any("action", req.Method), zap.Any("data", req.Params))
+	sp := req.GetServicesProvider()
+	method := req.GetMethod()
+
+	ansibleAction, ok := actions.AnsibleActions[method]
+	if ok {
+		secrets := sp.GetSecrets()
+		ansibleSecret, ok := secrets["ansible"]
+		if !ok {
+			return nil, status.Errorf(codes.InvalidArgument, "No ansible config")
+		}
+		ansibleSecretValue := ansibleSecret.GetStructValue().AsMap()
+		return ansibleAction(log, s.ansibleCtx, s.ansibleClient, ansibleSecretValue, nil, req.GetParams())
+	}
+
+	return nil, fmt.Errorf("action '%s' not declared for %s", req.GetMethod(), s.Type)
 }

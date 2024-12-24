@@ -225,9 +225,6 @@ func VpnAction(
 	inst *ipb.Instance,
 	data map[string]*structpb.Value,
 ) (*ipb.InvokeResponse, error) {
-	if inst == nil || inst.Config == nil {
-		return nil, fmt.Errorf("instance has no configuration")
-	}
 	playbookUp, ok := ansibleParams["playbook_vpn_up"].(string)
 	if !ok {
 		return nil, fmt.Errorf("no up playbook in sp")
@@ -240,9 +237,9 @@ func VpnAction(
 	if !ok {
 		return nil, fmt.Errorf("no delete playbook in sp")
 	}
-	playbookMonitoring, ok := ansibleParams["playbook_vpn_monitoring"].(string)
+	playbookSniff, ok := ansibleParams["playbook_vpn_sniff"].(string)
 	if !ok {
-		return nil, fmt.Errorf("no monitoring playbook in sp")
+		return nil, fmt.Errorf("no sniff playbook in sp")
 	}
 	baseUrl, ok := ansibleParams["nocloud_base_url"].(string)
 	if !ok {
@@ -262,8 +259,19 @@ func VpnAction(
 		playbooksChain = []string{playbookUp}
 	case "hard_reset":
 		playbooksChain = []string{playbookDelete, playbookUp}
-	case "monitoring":
-		playbooksChain = []string{playbookMonitoring}
+	case "sniff":
+		playbooksChain = []string{playbookSniff}
+		if inst == nil {
+			inst = &ipb.Instance{
+				Uuid: "no_uuid",
+				Config: map[string]*structpb.Value{
+					"username": data["username"],
+					"password": data["password"],
+					"host":     data["host"],
+					"port":     data["port"],
+				},
+			}
+		}
 	case "restart":
 		playbooksChain = []string{playbookDown, playbookUp}
 	case "delete":

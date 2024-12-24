@@ -6,7 +6,7 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/rabbitmq/amqp091-go v1.9.0
 	github.com/slntopp/nocloud v0.0.19-0.20241222000954-3003ae4c1b4c
-	github.com/slntopp/nocloud-proto v0.0.0-20241218103715-0ee38a002fda
+	github.com/slntopp/nocloud-proto v0.0.0-20241224160412-f75ea6359750
 	github.com/spf13/viper v1.18.2
 	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.64.0
