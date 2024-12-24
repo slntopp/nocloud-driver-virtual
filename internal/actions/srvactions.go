@@ -279,6 +279,9 @@ func VpnAction(
 	default:
 		return nil, fmt.Errorf("invalid action provided")
 	}
+	if inst == nil || inst.Config == nil {
+		return nil, fmt.Errorf("no config data provided")
+	}
 	if len(playbooksChain) == 0 {
 		return nil, fmt.Errorf("no playbooks to play")
 	}
