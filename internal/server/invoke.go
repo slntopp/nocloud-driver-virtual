@@ -23,7 +23,7 @@ func (s *VirtualDriver) Invoke(ctx context.Context, req *pb.InvokeRequest) (*ipb
 	log := s.log.With(zap.String("instance", instance.GetUuid()), zap.String("method", method))
 	log.Debug("Invoke request received", zap.Any("action", req.Method))
 
-	if instance.GetAccess().GetLevel() < accesspb.Level_ROOT {
+	if instance.GetAccess().GetLevel() < accesspb.Level_ADMIN {
 		return nil, status.Errorf(codes.PermissionDenied, "Action %s is admin action", method)
 	}
 
