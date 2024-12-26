@@ -229,6 +229,10 @@ func VpnAction(
 	if !ok {
 		return nil, fmt.Errorf("no up playbook in sp")
 	}
+	playbookStart, ok := ansibleParams["playbook_vpn_start"].(string)
+	if !ok {
+		return nil, fmt.Errorf("no start playbook in sp")
+	}
 	playbookDown, ok := ansibleParams["playbook_vpn_down"].(string)
 	if !ok {
 		return nil, fmt.Errorf("no down playbook in sp")
@@ -256,9 +260,19 @@ func VpnAction(
 	case "stop":
 		playbooksChain = []string{playbookDown}
 	case "start":
-		playbooksChain = []string{playbookUp}
+		playbooksChain = []string{playbookStart}
 	case "hard_reset":
 		playbooksChain = []string{playbookDelete, playbookUp}
+		if val, ok := data["host"]; ok && val.GetStringValue() != "" {
+			if inst != nil {
+				inst.Config = map[string]*structpb.Value{
+					"username": data["username"],
+					"password": data["password"],
+					"host":     data["host"],
+					"port":     data["port"],
+				}
+			}
+		}
 	case "sniff":
 		playbooksChain = []string{playbookSniff}
 		if inst == nil {
@@ -273,7 +287,7 @@ func VpnAction(
 			}
 		}
 	case "restart":
-		playbooksChain = []string{playbookDown, playbookUp}
+		playbooksChain = []string{playbookDown, playbookStart}
 	case "delete":
 		playbooksChain = []string{playbookDelete}
 	default:
