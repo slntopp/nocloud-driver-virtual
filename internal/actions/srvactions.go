@@ -372,7 +372,7 @@ func VpnAction(
 				log.Error("Failed to unmarshal to structpb.ListValue", zap.Error(err))
 			}
 			return &ipb.InvokeResponse{
-				Result: true,
+				Result: false,
 				Meta: map[string]*structpb.Value{
 					"errors": structpb.NewListValue(s),
 				},
