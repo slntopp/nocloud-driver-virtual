@@ -362,7 +362,7 @@ func VpnAction(
 		return errs, nil
 	}
 	for _, p := range playbooksChain {
-		if ansErrs, err := runPlaybook(p); err != nil || len(ansErrs) > 0 {
+		if ansErrs, pbErr := runPlaybook(p); pbErr != nil || len(ansErrs) > 0 {
 			b, err := json.Marshal(ansErrs)
 			if err != nil {
 				log.Error("Failed to construct marshal errors", zap.Error(err))
@@ -376,7 +376,7 @@ func VpnAction(
 				Meta: map[string]*structpb.Value{
 					"errors": structpb.NewListValue(s),
 				},
-			}, err
+			}, pbErr
 		}
 	}
 	return &ipb.InvokeResponse{
