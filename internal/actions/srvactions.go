@@ -286,6 +286,16 @@ func VpnAction(
 				},
 			}
 		}
+		if val, ok := data["host"]; ok && val.GetStringValue() != "" {
+			if inst != nil {
+				inst.Config = map[string]*structpb.Value{
+					"username": data["username"],
+					"password": data["password"],
+					"host":     data["host"],
+					"port":     data["port"],
+				}
+			}
+		}
 	case "restart":
 		playbooksChain = []string{playbookDown, playbookStart}
 	case "delete":
