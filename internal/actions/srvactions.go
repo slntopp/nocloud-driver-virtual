@@ -9,7 +9,9 @@ import (
 	"github.com/slntopp/nocloud/pkg/nocloud/auth"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
+	"net"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -333,6 +335,32 @@ func VpnAction(
 		User: &username,
 		Pass: &password,
 	}
+	if err := validateIP(host); err != nil {
+		errs := AnsibleError{
+			Code:        codeUnreachable,
+			Message:     err.Error(),
+			UserMessage: "Wrong host. Provide valid IP address.",
+		}
+		return &ipb.InvokeResponse{
+			Result: false,
+			Meta: map[string]*structpb.Value{
+				"errors": encodeErrors(errs),
+			},
+		}, nil
+	}
+	if err := validatePort(port); err != nil {
+		errs := AnsibleError{
+			Code:        codeUnreachable,
+			Message:     err.Error(),
+			UserMessage: "Wrong port. Provide valid numeric port.",
+		}
+		return &ipb.InvokeResponse{
+			Result: false,
+			Meta: map[string]*structpb.Value{
+				"errors": encodeErrors(errs),
+			},
+		}, nil
+	}
 	instToken, err := auth.MakeTokenInstance(inst.GetUuid())
 	if err != nil {
 		return nil, fmt.Errorf("failed to issue instance token: %w", err)
@@ -387,18 +415,10 @@ func VpnAction(
 	}
 	for _, p := range playbooksChain {
 		if ansErrs, pbErr := runPlaybook(p); pbErr != nil || len(ansErrs) > 0 {
-			b, err := json.Marshal(ansErrs)
-			if err != nil {
-				log.Error("Failed to construct marshal errors", zap.Error(err))
-			}
-			s := &structpb.ListValue{}
-			if err = protojson.Unmarshal(b, s); err != nil {
-				log.Error("Failed to unmarshal to structpb.ListValue", zap.Error(err))
-			}
 			return &ipb.InvokeResponse{
 				Result: false,
 				Meta: map[string]*structpb.Value{
-					"errors": structpb.NewListValue(s),
+					"errors": encodeErrors(ansErrs...),
 				},
 			}, pbErr
 		}
@@ -428,4 +448,33 @@ func findInstanceHostPort(inst *ipb.Instance) (string, *string, error) {
 		}
 	}
 	return "", port, fmt.Errorf("not found")
+}
+func validateIP(ip string) error {
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return fmt.Errorf("not valid IP address")
+	}
+
+	if parsedIP.To4() == nil && parsedIP.To16() == nil {
+		return fmt.Errorf("ip address not an IPv4 address nor IPv6")
+	}
+
+	return nil
+}
+func validatePort(port *string) error {
+	if port == nil {
+		return nil
+	}
+
+	if _, err := strconv.Atoi(*port); err != nil {
+		return fmt.Errorf("not a valid port. Must be a number")
+	}
+
+	return nil
+}
+func encodeErrors(errs ...AnsibleError) *structpb.Value {
+	b, _ := json.Marshal(errs)
+	s := &structpb.ListValue{}
+	_ = protojson.Unmarshal(b, s)
+	return structpb.NewListValue(s)
 }
