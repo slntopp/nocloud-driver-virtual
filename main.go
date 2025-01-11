@@ -122,7 +122,8 @@ func main() {
 	}
 
 	if instancesHost != "" {
-		actions.SetInstancesClient(iconnect.NewInstancesServiceClient(http.DefaultClient, instancesHost))
+		token, _ := auth.MakeToken(schema.ROOT_ACCOUNT_KEY)
+		actions.SetInstancesClient(iconnect.NewInstancesServiceClient(http.DefaultClient, instancesHost), token)
 	}
 
 	vanilla.RegisterDriverServiceServer(s, srv)

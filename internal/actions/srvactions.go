@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"connectrpc.com/connect"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -29,9 +30,11 @@ import (
 )
 
 var instancesClient iconnect.InstancesServiceClient
+var rootToken string
 
-func SetInstancesClient(client iconnect.InstancesServiceClient) {
+func SetInstancesClient(client iconnect.InstancesServiceClient, token string) {
 	instancesClient = client
+	rootToken = token
 }
 
 type ServiceAction func(*zap.Logger, states.Pub, instances.Pub, *ipb.Instance, map[string]*structpb.Value) (*ipb.InvokeResponse, error)
@@ -322,9 +325,23 @@ func VpnAction(
 	// Get hosts data (based on driver)
 	var host, username, password string
 	var port *string
-	username = inst.GetConfig()["username"].GetStringValue()
-	password = inst.GetConfig()["password"].GetStringValue()
-	host, port, _ = findInstanceHostPort(inst)
+	if val, ok := inst.GetConfig()["instance"]; ok && val.GetStringValue() != "" {
+		req := connect.NewRequest(&ipb.Instance{Uuid: val.GetStringValue()})
+		req.Header().Set("Authorization", "Bearer "+rootToken)
+		resp, err := instancesClient.Get(ctx, req)
+		if err != nil {
+			log.Error("Can't get instance", zap.Error(err))
+			return nil, err
+		}
+		respInstance := resp.Msg.GetInstance()
+		username = respInstance.GetConfig()["username"].GetStringValue()
+		password = respInstance.GetConfig()["password"].GetStringValue()
+		host, port, _ = findInstanceHostPort(respInstance)
+	} else {
+		username = inst.GetConfig()["username"].GetStringValue()
+		password = inst.GetConfig()["password"].GetStringValue()
+		host, port, _ = findInstanceHostPort(inst)
+	}
 	//
 	if host == "" {
 		return nil, fmt.Errorf("no host")
