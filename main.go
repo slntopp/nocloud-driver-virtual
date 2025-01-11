@@ -76,7 +76,7 @@ func init() {
 	viper.SetDefault("REDIS_HOST", "redis:6379")
 	redisHost = viper.GetString("REDIS_HOST")
 
-	viper.SetDefault("INSTANCES_HOST", "instances:8000")
+	viper.SetDefault("INSTANCES_HOST", "http://instances:8000")
 	instancesHost = viper.GetString("INSTANCES_HOST")
 }
 
