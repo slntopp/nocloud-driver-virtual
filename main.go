@@ -19,9 +19,11 @@ import (
 	"context"
 	"github.com/go-redis/redis/v8"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/slntopp/nocloud-driver-virtual/internal/actions"
 	"github.com/slntopp/nocloud-driver-virtual/internal/server"
 	"github.com/slntopp/nocloud-proto/ansible"
 	"github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
+	iconnect "github.com/slntopp/nocloud-proto/instances/instancesconnect"
 	"github.com/slntopp/nocloud/pkg/nocloud"
 	"github.com/slntopp/nocloud/pkg/nocloud/auth"
 	grpc_server "github.com/slntopp/nocloud/pkg/nocloud/grpc"
@@ -32,6 +34,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"net/http"
 )
 
 var (
@@ -47,6 +50,8 @@ var (
 	ansibleHost string
 
 	redisHost string
+
+	instancesHost string
 )
 
 func init() {
@@ -70,6 +75,9 @@ func init() {
 
 	viper.SetDefault("REDIS_HOST", "redis:6379")
 	redisHost = viper.GetString("REDIS_HOST")
+
+	viper.SetDefault("INSTANCES_HOST", "instances:8000")
+	instancesHost = viper.GetString("INSTANCES_HOST")
 }
 
 // dev
@@ -111,6 +119,10 @@ func main() {
 		} else {
 			log.Fatal("Failed to setup ansible connection", zap.Error(err))
 		}
+	}
+
+	if instancesHost != "" {
+		actions.SetInstancesClient(iconnect.NewInstancesServiceClient(http.DefaultClient, instancesHost))
 	}
 
 	vanilla.RegisterDriverServiceServer(s, srv)

@@ -17,6 +17,7 @@ import (
 
 	billingpb "github.com/slntopp/nocloud-proto/billing"
 	ipb "github.com/slntopp/nocloud-proto/instances"
+	iconnect "github.com/slntopp/nocloud-proto/instances/instancesconnect"
 	stpb "github.com/slntopp/nocloud-proto/states"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,6 +27,12 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 )
+
+var instancesClient iconnect.InstancesServiceClient
+
+func SetInstancesClient(client iconnect.InstancesServiceClient) {
+	instancesClient = client
+}
 
 type ServiceAction func(*zap.Logger, states.Pub, instances.Pub, *ipb.Instance, map[string]*structpb.Value) (*ipb.InvokeResponse, error)
 
