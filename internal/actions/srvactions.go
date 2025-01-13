@@ -325,33 +325,29 @@ func VpnAction(
 	// Get hosts data (based on driver)
 	var host, username, password string
 	var port *string
-	if val, ok := inst.GetConfig()["instance"]; ok && val.GetStringValue() != "" {
-		req := connect.NewRequest(&ipb.Instance{Uuid: val.GetStringValue()})
-		req.Header().Set("Authorization", "Bearer "+rootToken)
-		resp, err := instancesClient.Get(ctx, req)
-		if err != nil {
-			log.Error("Can't get instance", zap.Error(err))
-			return nil, err
-		}
-		respInstance := resp.Msg.GetInstance()
-		username = respInstance.GetConfig()["username"].GetStringValue()
-		password = respInstance.GetConfig()["password"].GetStringValue()
-		host, port, _ = findInstanceHostPort(respInstance)
-	} else {
-		username = inst.GetConfig()["username"].GetStringValue()
-		password = inst.GetConfig()["password"].GetStringValue()
-		host, port, _ = findInstanceHostPort(inst)
-	}
 	//
-	if host == "" {
-		return nil, fmt.Errorf("no host")
+	username = inst.GetConfig()["username"].GetStringValue()
+	password = inst.GetConfig()["password"].GetStringValue()
+	host, port, _ = findInstanceHostPort(inst)
+	if err := validateCredentials(host, username, password); err != nil {
+		if val, ok := inst.GetConfig()["instance"]; ok && val.GetStringValue() != "" {
+			req := connect.NewRequest(&ipb.Instance{Uuid: val.GetStringValue()})
+			req.Header().Set("Authorization", "Bearer "+rootToken)
+			resp, err := instancesClient.Get(ctx, req)
+			if err != nil {
+				log.Error("Can't get instance", zap.Error(err))
+				return nil, err
+			}
+			respInstance := resp.Msg.GetInstance()
+			username = respInstance.GetConfig()["username"].GetStringValue()
+			password = respInstance.GetConfig()["password"].GetStringValue()
+			host, port, _ = findInstanceHostPort(respInstance)
+		}
 	}
-	if username == "" {
-		return nil, fmt.Errorf("no username")
+	if err := validateCredentials(host, username, password); err != nil {
+		return nil, err
 	}
-	if password == "" {
-		return nil, fmt.Errorf("no password")
-	}
+
 	ansibleInstance := &ansible.Instance{
 		Uuid: inst.GetUuid(),
 		Host: host,
@@ -501,4 +497,17 @@ func encodeErrors(errs ...AnsibleError) *structpb.Value {
 	s := &structpb.ListValue{}
 	_ = protojson.Unmarshal(b, s)
 	return structpb.NewListValue(s)
+}
+
+func validateCredentials(host, password, username string) error {
+	if host == "" {
+		return fmt.Errorf("no host")
+	}
+	if username == "" {
+		return fmt.Errorf("no username")
+	}
+	if password == "" {
+		return fmt.Errorf("no password")
+	}
+	return nil
 }
