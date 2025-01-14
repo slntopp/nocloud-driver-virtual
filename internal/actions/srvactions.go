@@ -1,13 +1,24 @@
 package actions
 
 import (
+	"connectrpc.com/connect"
+	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/slntopp/nocloud-driver-virtual/internal/utils"
+	"github.com/slntopp/nocloud-proto/ansible"
+	"github.com/slntopp/nocloud/pkg/nocloud/auth"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/encoding/protojson"
+	"net"
+	"path"
+	"strconv"
+	"strings"
 	"time"
 
 	billingpb "github.com/slntopp/nocloud-proto/billing"
 	ipb "github.com/slntopp/nocloud-proto/instances"
+	iconnect "github.com/slntopp/nocloud-proto/instances/instancesconnect"
 	stpb "github.com/slntopp/nocloud-proto/states"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -18,7 +29,24 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+var instancesClient iconnect.InstancesServiceClient
+var rootToken string
+
+func SetInstancesClient(client iconnect.InstancesServiceClient, token string) {
+	instancesClient = client
+	rootToken = token
+}
+
 type ServiceAction func(*zap.Logger, states.Pub, instances.Pub, *ipb.Instance, map[string]*structpb.Value) (*ipb.InvokeResponse, error)
+
+type AnsibleAction func(
+	*zap.Logger,
+	context.Context,
+	ansible.AnsibleServiceClient,
+	map[string]any,
+	*ipb.Instance,
+	map[string]*structpb.Value,
+) (*ipb.InvokeResponse, error)
 
 var SrvActions = map[string]ServiceAction{
 	"change_state": ChangeState,
@@ -31,6 +59,10 @@ var BillingActions = map[string]ServiceAction{
 	"manual_renew": nil,
 	"cancel_renew": CancelRenew,
 	"free_renew":   FreeRenew,
+}
+
+var AnsibleActions = map[string]AnsibleAction{
+	"vpn": VpnAction,
 }
 
 func ChangeState(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.Instance, data map[string]*structpb.Value) (*ipb.InvokeResponse, error) {
@@ -182,4 +214,300 @@ func CancelRenew(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb
 
 	utils.SendActualMonitoringData(instData, instData, inst.GetUuid(), iPub)
 	return &ipb.InvokeResponse{Result: true}, nil
+}
+
+type AnsibleError struct {
+	Code        string `json:"code"`
+	Message     string `json:"message"`
+	UserMessage string `json:"user_message"`
+}
+
+const (
+	codeUnreachable   = "UNREACHABLE"
+	codeUnsupportedOS = "NOT_SUPPORTED_OS"
+	codeStopped       = "STOPPED"
+	codeInternal      = "INTERNAL"
+)
+
+func VpnAction(
+	log *zap.Logger,
+	ctx context.Context,
+	client ansible.AnsibleServiceClient,
+	ansibleParams map[string]any,
+	inst *ipb.Instance,
+	data map[string]*structpb.Value,
+) (*ipb.InvokeResponse, error) {
+	playbookUp, ok := ansibleParams["playbook_vpn_up"].(string)
+	if !ok {
+		return nil, fmt.Errorf("no up playbook in sp")
+	}
+	playbookStart, ok := ansibleParams["playbook_vpn_start"].(string)
+	if !ok {
+		return nil, fmt.Errorf("no start playbook in sp")
+	}
+	playbookDown, ok := ansibleParams["playbook_vpn_down"].(string)
+	if !ok {
+		return nil, fmt.Errorf("no down playbook in sp")
+	}
+	playbookDelete, ok := ansibleParams["playbook_vpn_delete"].(string)
+	if !ok {
+		return nil, fmt.Errorf("no delete playbook in sp")
+	}
+	playbookSniff, ok := ansibleParams["playbook_vpn_sniff"].(string)
+	if !ok {
+		return nil, fmt.Errorf("no sniff playbook in sp")
+	}
+	baseUrl, ok := ansibleParams["nocloud_base_url"].(string)
+	if !ok {
+		return nil, fmt.Errorf("no nocloud base url in sp")
+	}
+	var playbooksChain []string
+	action, ok := data["action"]
+	if !ok || action == nil || action.GetStringValue() == "" {
+		return nil, fmt.Errorf("no action provided")
+	}
+	switch action.GetStringValue() {
+	case "create":
+		playbooksChain = []string{playbookUp}
+	case "stop":
+		playbooksChain = []string{playbookDown}
+	case "start":
+		playbooksChain = []string{playbookStart}
+	case "hard_reset":
+		playbooksChain = []string{playbookDelete, playbookUp}
+		if val, ok := data["host"]; ok && val.GetStringValue() != "" {
+			if inst != nil {
+				inst.Config = map[string]*structpb.Value{
+					"username": data["username"],
+					"password": data["password"],
+					"host":     data["host"],
+					"port":     data["port"],
+				}
+			}
+		}
+	case "sniff":
+		playbooksChain = []string{playbookSniff}
+		if inst == nil {
+			inst = &ipb.Instance{
+				Uuid: "no_uuid",
+				Config: map[string]*structpb.Value{
+					"username": data["username"],
+					"password": data["password"],
+					"host":     data["host"],
+					"port":     data["port"],
+				},
+			}
+		}
+		if val, ok := data["host"]; ok && val.GetStringValue() != "" {
+			if inst != nil {
+				inst.Config = map[string]*structpb.Value{
+					"username": data["username"],
+					"password": data["password"],
+					"host":     data["host"],
+					"port":     data["port"],
+				}
+			}
+		}
+	case "restart":
+		playbooksChain = []string{playbookDown, playbookStart}
+	case "delete":
+		playbooksChain = []string{playbookDelete}
+	default:
+		return nil, fmt.Errorf("invalid action provided")
+	}
+	if inst == nil || inst.Config == nil {
+		return nil, fmt.Errorf("no config data provided")
+	}
+	if len(playbooksChain) == 0 {
+		return nil, fmt.Errorf("no playbooks to play")
+	}
+	log = log.Named("VpnAction").With(zap.String("instance", inst.GetUuid()), zap.String("action", action.GetStringValue()))
+	// Get hosts data (based on driver)
+	var host, username, password string
+	var port *string
+	//
+	username = inst.GetConfig()["username"].GetStringValue()
+	password = inst.GetConfig()["password"].GetStringValue()
+	host, port, _ = findInstanceHostPort(inst)
+	if err := validateCredentials(host, username, password); err != nil {
+		if val, ok := inst.GetConfig()["instance"]; ok && val.GetStringValue() != "" {
+			req := connect.NewRequest(&ipb.Instance{Uuid: val.GetStringValue()})
+			req.Header().Set("Authorization", "Bearer "+rootToken)
+			resp, err := instancesClient.Get(ctx, req)
+			if err != nil {
+				log.Error("Can't get instance", zap.Error(err))
+				return nil, err
+			}
+			respInstance := resp.Msg.GetInstance()
+			username = respInstance.GetConfig()["username"].GetStringValue()
+			password = respInstance.GetConfig()["password"].GetStringValue()
+			host, port, _ = findInstanceHostPort(respInstance)
+		}
+	}
+	if err := validateCredentials(host, username, password); err != nil {
+		return nil, err
+	}
+
+	ansibleInstance := &ansible.Instance{
+		Uuid: inst.GetUuid(),
+		Host: host,
+		Port: port,
+		User: &username,
+		Pass: &password,
+	}
+	if err := validateIP(host); err != nil {
+		errs := AnsibleError{
+			Code:        codeUnreachable,
+			Message:     err.Error(),
+			UserMessage: "Wrong host. Provide valid IP address.",
+		}
+		return &ipb.InvokeResponse{
+			Result: false,
+			Meta: map[string]*structpb.Value{
+				"errors": encodeErrors(errs),
+			},
+		}, nil
+	}
+	if err := validatePort(port); err != nil {
+		errs := AnsibleError{
+			Code:        codeUnreachable,
+			Message:     err.Error(),
+			UserMessage: "Wrong port. Provide valid numeric port.",
+		}
+		return &ipb.InvokeResponse{
+			Result: false,
+			Meta: map[string]*structpb.Value{
+				"errors": encodeErrors(errs),
+			},
+		}, nil
+	}
+	instToken, err := auth.MakeTokenInstance(inst.GetUuid())
+	if err != nil {
+		return nil, fmt.Errorf("failed to issue instance token: %w", err)
+	}
+	runPlaybook := func(playbook string) (errs []AnsibleError, err error) {
+		log := log.With(zap.String("playbook", playbook))
+		create, err := client.Create(ctx, &ansible.CreateRunRequest{
+			Run: &ansible.Run{
+				Instances: []*ansible.Instance{
+					ansibleInstance,
+				},
+				PlaybookUuid: playbook,
+				Vars: map[string]string{
+					"INSTANCE_TOKEN":       instToken,
+					"POST_STATE_URL":       path.Join(baseUrl, "edge/post_state"),
+					"POST_CONFIG_DATA_URL": path.Join(baseUrl, "edge/post_config_data"),
+				},
+			},
+		})
+		if err != nil {
+			return errs, fmt.Errorf("failed to create new runnable instance: %w", err)
+		}
+		resp, err := client.Exec(ctx, &ansible.ExecRunRequest{
+			Uuid:       create.GetUuid(),
+			WaitFinish: true,
+		})
+		if err != nil {
+			return errs, fmt.Errorf("failed to execute: %w", err)
+		}
+		if resp.GetStatus() == "failed" {
+			for _, e := range resp.GetError() {
+				log.Debug("Got ansible error", zap.String("host", e.Host), zap.String("message", e.GetError()))
+				msg := fmt.Sprintf("Host: %s Message: %s", e.Host, e.Error)
+				if e.GetError() == "UNREACHABLE" {
+					errs = append(errs, AnsibleError{Code: codeUnreachable,
+						Message: msg, UserMessage: "No access to remote host."})
+				} else if strings.Contains(e.GetError(), "UNSUPPORTED_OS") {
+					errs = append(errs, AnsibleError{Code: codeUnsupportedOS,
+						Message: msg, UserMessage: "Remote machine has unsupported operating system."})
+				} else if strings.Contains(e.GetError(), "STOPPED") {
+					errs = append(errs, AnsibleError{Code: codeStopped,
+						Message: msg, UserMessage: "VPN stopped."})
+				} else {
+					errs = append(errs, AnsibleError{Code: codeInternal,
+						Message: msg, UserMessage: "Internal error. Try again later or contact support."})
+				}
+			}
+		} else if resp.GetStatus() != "successful" {
+			log.Error("Status is not successful", zap.String("status", resp.GetStatus()))
+		}
+		return errs, nil
+	}
+	for _, p := range playbooksChain {
+		if ansErrs, pbErr := runPlaybook(p); pbErr != nil || len(ansErrs) > 0 {
+			return &ipb.InvokeResponse{
+				Result: false,
+				Meta: map[string]*structpb.Value{
+					"errors": encodeErrors(ansErrs...),
+				},
+			}, pbErr
+		}
+	}
+	return &ipb.InvokeResponse{
+		Result: true,
+	}, nil
+}
+func findInstanceHostPort(inst *ipb.Instance) (string, *string, error) {
+	var port *string
+	if inst == nil {
+		return "", port, fmt.Errorf("instance is nil")
+	}
+	if val, ok := inst.GetConfig()["host"]; ok && val.GetStringValue() != "" {
+		if p, ok := inst.GetConfig()["port"]; ok && p.GetStringValue() != "" {
+			pVal := p.GetStringValue()
+			port = &pVal
+		}
+		return val.GetStringValue(), port, nil
+	}
+	for _, i := range inst.GetState().GetInterfaces() {
+		if host, ok := i.GetData()["host"]; ok && host != "" {
+			if p := i.GetData()["port"]; p != "" {
+				port = &p
+			}
+			return host, port, nil
+		}
+	}
+	return "", port, fmt.Errorf("not found")
+}
+func validateIP(ip string) error {
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return fmt.Errorf("not valid IP address")
+	}
+
+	if parsedIP.To4() == nil && parsedIP.To16() == nil {
+		return fmt.Errorf("ip address not an IPv4 address nor IPv6")
+	}
+
+	return nil
+}
+func validatePort(port *string) error {
+	if port == nil {
+		return nil
+	}
+
+	if _, err := strconv.Atoi(*port); err != nil {
+		return fmt.Errorf("not a valid port. Must be a number")
+	}
+
+	return nil
+}
+func encodeErrors(errs ...AnsibleError) *structpb.Value {
+	b, _ := json.Marshal(errs)
+	s := &structpb.ListValue{}
+	_ = protojson.Unmarshal(b, s)
+	return structpb.NewListValue(s)
+}
+
+func validateCredentials(host, password, username string) error {
+	if host == "" {
+		return fmt.Errorf("no host")
+	}
+	if username == "" {
+		return fmt.Errorf("no username")
+	}
+	if password == "" {
+		return fmt.Errorf("no password")
+	}
+	return nil
 }

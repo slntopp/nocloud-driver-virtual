@@ -18,7 +18,10 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/go-redis/redis/v8"
+	"github.com/slntopp/nocloud-proto/ansible"
 	eventpb "github.com/slntopp/nocloud-proto/events"
+	"github.com/slntopp/nocloud/pkg/nocloud/auth"
 	"time"
 
 	pb "github.com/slntopp/nocloud-proto/drivers/instance/vanilla"
@@ -52,10 +55,13 @@ type VirtualDriver struct {
 	HandlePublishSPState       states.Pub
 	HandlePublishInstanceState states.Pub
 	HandlePublishInstanceData  i.Pub
+
+	ansibleCtx    context.Context
+	ansibleClient ansible.AnsibleServiceClient
 }
 
-func NewVirtualDriver(log *zap.Logger, rbmq *amqp091.Connection, _type string) *VirtualDriver {
-
+func NewVirtualDriver(log *zap.Logger, rbmq *amqp091.Connection, rdb *redis.Client, key []byte, _type string) *VirtualDriver {
+	auth.SetContext(log, rdb, key)
 	return &VirtualDriver{
 		log: log.Named("VirtualDriver").Named(_type), Type: _type,
 
@@ -69,6 +75,11 @@ func NewVirtualDriver(log *zap.Logger, rbmq *amqp091.Connection, _type string) *
 
 func (s *VirtualDriver) GetType(ctx context.Context, req *pb.GetTypeRequest) (*pb.GetTypeResponse, error) {
 	return &pb.GetTypeResponse{Type: s.Type}, nil
+}
+
+func (s *VirtualDriver) SetAnsibleClient(ctx context.Context, client ansible.AnsibleServiceClient) {
+	s.ansibleCtx = ctx
+	s.ansibleClient = client
 }
 
 func (s *VirtualDriver) TestServiceProviderConfig(ctx context.Context, req *pb.TestServiceProviderConfigRequest) (*sppb.TestResponse, error) {
