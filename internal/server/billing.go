@@ -177,7 +177,11 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 		log.Debug("NOT SUS")
 		var price float64
 		for _, rec := range records {
-			price += rec.GetTotal()
+			if rec.Addon != "" {
+				price += rec.GetTotal() * calculateAddonPrice(addons, i, rec.Addon)
+			} else {
+				price += rec.GetTotal() * calculateProductPrice(i, rec.Product)
+			}
 		}
 
 		if price > *balance {
@@ -219,6 +223,32 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 		s.HandlePublishRecords(records)
 		utils.SendActualMonitoringData(i.Data, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
 	}
+}
+
+func calculateProductPrice(i *instances.Instance, prod string) float64 {
+	if i.BillingPlan == nil || i.BillingPlan.Products == nil {
+		return 0
+	}
+	bpProd, ok := i.BillingPlan.Products[prod]
+	if !ok {
+		return 0
+	}
+	return bpProd.Price
+}
+
+func calculateAddonPrice(addons map[string]*apb.Addon, i *instances.Instance, id string) float64 {
+	if i.BillingPlan == nil || i.BillingPlan.Products == nil || i.Product == nil {
+		return 0
+	}
+	addon, ok := addons[id]
+	if !ok {
+		return 0
+	}
+	if addon.Periods == nil {
+		return 0
+	}
+	period := i.BillingPlan.Products[*i.Product].Period
+	return addon.Periods[period]
 }
 
 func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons map[string]*apb.Addon) {
