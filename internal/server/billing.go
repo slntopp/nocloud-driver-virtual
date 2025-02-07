@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/slntopp/nocloud-driver-virtual/internal/utils"
+	sppb "github.com/slntopp/nocloud-proto/services_providers"
+	"github.com/slntopp/nocloud/pkg/nocloud/suspend_rules"
 	"maps"
 	"slices"
 	"time"
@@ -34,7 +36,7 @@ var notificationsPeriods = []ExpiryDiff{
 	{2592000, 30},
 }
 
-func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *float64, addons map[string]*apb.Addon) {
+func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *float64, addons map[string]*apb.Addon, sp *sppb.ServicesProvider) {
 	log := s.log.Named("BillingHandler").Named(i.GetUuid())
 	log.Debug("Initializing")
 
@@ -158,42 +160,51 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 	if len(records) != 0 && status == statusespb.NoCloudStatus_SUS {
 		log.Debug("SUS")
 		if i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
-			go s.HandlePublishInstanceState(&statespb.ObjectState{
-				Uuid: i.GetUuid(),
-				State: &statespb.State{
-					State: statespb.NoCloudState_SUSPENDED,
-				},
-			})
 
-			go s.HandlePublishEvent(&epb.Event{
-				Uuid: i.GetUuid(),
-				Key:  "instance_suspended",
-				Data: map[string]*structpb.Value{},
-			})
-
-			utils.SendActualMonitoringData(dataCopy, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
-		}
-	} else {
-		log.Debug("NOT SUS")
-		var price float64
-		for _, rec := range records {
-			price += rec.GetTotal()
-		}
-
-		if price > *balance {
-			if i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
+			if suspend_rules.SuspendAllowed(sp.GetSuspendRules(), time.Now().UTC()) {
 				go s.HandlePublishInstanceState(&statespb.ObjectState{
 					Uuid: i.GetUuid(),
 					State: &statespb.State{
 						State: statespb.NoCloudState_SUSPENDED,
 					},
 				})
-
 				go s.HandlePublishEvent(&epb.Event{
 					Uuid: i.GetUuid(),
 					Key:  "instance_suspended",
 					Data: map[string]*structpb.Value{},
 				})
+				utils.SendActualMonitoringData(dataCopy, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
+			}
+
+		}
+	} else {
+		log.Debug("NOT SUS")
+		var price float64
+		for _, rec := range records {
+			if rec.Addon != "" {
+				price += rec.GetTotal() * calculateAddonPrice(addons, i, rec.Addon)
+			} else {
+				price += rec.GetTotal() * calculateProductPrice(i, rec.Product)
+			}
+		}
+
+		if price > *balance {
+			if i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
+
+				if suspend_rules.SuspendAllowed(sp.GetSuspendRules(), time.Now().UTC()) {
+					go s.HandlePublishInstanceState(&statespb.ObjectState{
+						Uuid: i.GetUuid(),
+						State: &statespb.State{
+							State: statespb.NoCloudState_SUSPENDED,
+						},
+					})
+					go s.HandlePublishEvent(&epb.Event{
+						Uuid: i.GetUuid(),
+						Key:  "instance_suspended",
+						Data: map[string]*structpb.Value{},
+					})
+				}
+
 			}
 
 			utils.SendActualMonitoringData(dataCopy, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
@@ -208,7 +219,6 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 					State: statespb.NoCloudState_RUNNING,
 				},
 			})
-
 			go s.HandlePublishEvent(&epb.Event{
 				Uuid: i.GetUuid(),
 				Key:  "instance_unsuspended",
@@ -221,7 +231,33 @@ func (s *VirtualDriver) _handleInstanceBilling(i *instances.Instance, balance *f
 	}
 }
 
-func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons map[string]*apb.Addon) {
+func calculateProductPrice(i *instances.Instance, prod string) float64 {
+	if i.BillingPlan == nil || i.BillingPlan.Products == nil {
+		return 0
+	}
+	bpProd, ok := i.BillingPlan.Products[prod]
+	if !ok {
+		return 0
+	}
+	return bpProd.Price
+}
+
+func calculateAddonPrice(addons map[string]*apb.Addon, i *instances.Instance, id string) float64 {
+	if i.BillingPlan == nil || i.BillingPlan.Products == nil || i.Product == nil {
+		return 0
+	}
+	addon, ok := addons[id]
+	if !ok {
+		return 0
+	}
+	if addon.Periods == nil {
+		return 0
+	}
+	period := i.BillingPlan.Products[*i.Product].Period
+	return addon.Periods[period]
+}
+
+func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons map[string]*apb.Addon, sp *sppb.ServicesProvider) {
 	log := s.log.Named("NonReg").Named(i.GetUuid())
 	log.Debug("Initializing")
 
@@ -249,18 +285,21 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 
 		if product.GetKind() == billing.Kind_POSTPAID {
 			if now > lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
-				go s.HandlePublishInstanceState(&statespb.ObjectState{
-					Uuid: i.GetUuid(),
-					State: &statespb.State{
-						State: statespb.NoCloudState_SUSPENDED,
-					},
-				})
 
-				go s.HandlePublishEvent(&epb.Event{
-					Uuid: i.GetUuid(),
-					Key:  "instance_suspended",
-					Data: map[string]*structpb.Value{},
-				})
+				if suspend_rules.SuspendAllowed(sp.GetSuspendRules(), time.Now().UTC()) {
+					go s.HandlePublishInstanceState(&statespb.ObjectState{
+						Uuid: i.GetUuid(),
+						State: &statespb.State{
+							State: statespb.NoCloudState_SUSPENDED,
+						},
+					})
+					go s.HandlePublishEvent(&epb.Event{
+						Uuid: i.GetUuid(),
+						Key:  "instance_suspended",
+						Data: map[string]*structpb.Value{},
+					})
+				}
+
 			} else if now <= lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !suspendedManually {
 				go s.HandlePublishInstanceState(&statespb.ObjectState{
 					Uuid: i.GetUuid(),
@@ -285,18 +324,21 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(end))
 		} else {
 			if now > lastMonitoringValue && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
-				go s.HandlePublishInstanceState(&statespb.ObjectState{
-					Uuid: i.GetUuid(),
-					State: &statespb.State{
-						State: statespb.NoCloudState_SUSPENDED,
-					},
-				})
 
-				go s.HandlePublishEvent(&epb.Event{
-					Uuid: i.GetUuid(),
-					Key:  "instance_suspended",
-					Data: map[string]*structpb.Value{},
-				})
+				if suspend_rules.SuspendAllowed(sp.GetSuspendRules(), time.Now().UTC()) {
+					go s.HandlePublishInstanceState(&statespb.ObjectState{
+						Uuid: i.GetUuid(),
+						State: &statespb.State{
+							State: statespb.NoCloudState_SUSPENDED,
+						},
+					})
+					go s.HandlePublishEvent(&epb.Event{
+						Uuid: i.GetUuid(),
+						Key:  "instance_suspended",
+						Data: map[string]*structpb.Value{},
+					})
+				}
+
 			} else if now <= lastMonitoringValue && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !suspendedManually {
 				go s.HandlePublishInstanceState(&statespb.ObjectState{
 					Uuid: i.GetUuid(),

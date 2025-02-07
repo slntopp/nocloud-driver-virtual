@@ -3,10 +3,11 @@ module github.com/slntopp/nocloud-driver-virtual
 go 1.21
 
 require (
+	connectrpc.com/connect v1.14.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/rabbitmq/amqp091-go v1.9.0
-	github.com/slntopp/nocloud v0.0.19-0.20241222000954-3003ae4c1b4c
-	github.com/slntopp/nocloud-proto v0.0.0-20250111091130-cef7b71e8db5
+	github.com/slntopp/nocloud v0.0.19-0.20250207060517-7eddb37fe70a
+	github.com/slntopp/nocloud-proto v0.0.0-20250207050023-78355039f2b5
 	github.com/spf13/viper v1.18.2
 	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.64.0
@@ -14,7 +15,6 @@ require (
 )
 
 require (
-	connectrpc.com/connect v1.14.0 // indirect
 	github.com/arangodb/go-driver v1.6.2 // indirect
 	github.com/arangodb/go-velocypack v0.0.0-20200318135517-5af53c29c67e // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect

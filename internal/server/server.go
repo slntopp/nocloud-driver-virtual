@@ -297,9 +297,9 @@ func (s *VirtualDriver) Monitoring(ctx context.Context, req *pb.MonitoringReques
 
 			balance := req.GetBalance()[group.GetUuid()]
 			if autoRenew {
-				go s._handleInstanceBilling(i, &balance, req.Addons)
+				go s._handleInstanceBilling(i, &balance, req.Addons, sp)
 			} else {
-				go s._handleNonRegularBilling(i, req.Addons)
+				go s._handleNonRegularBilling(i, req.Addons, sp)
 			}
 			req.Balance[group.GetUuid()] = balance
 		}
