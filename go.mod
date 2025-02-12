@@ -6,8 +6,8 @@ require (
 	connectrpc.com/connect v1.14.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/rabbitmq/amqp091-go v1.9.0
-	github.com/slntopp/nocloud v0.0.19-0.20250207060517-7eddb37fe70a
-	github.com/slntopp/nocloud-proto v0.0.0-20250207050023-78355039f2b5
+	github.com/slntopp/nocloud v0.0.19-0.20250212175719-3909bc0b9fe5
+	github.com/slntopp/nocloud-proto v0.0.0-20250212175505-5d285dcff60b
 	github.com/spf13/viper v1.18.2
 	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.64.0
