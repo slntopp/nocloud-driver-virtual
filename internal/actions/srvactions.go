@@ -269,6 +269,11 @@ func VpnAction(
 	switch action.GetStringValue() {
 	case "create":
 		playbooksChain = []string{playbookUp}
+		if val, ok := data["wg_port"]; ok && val.GetStringValue() != "" {
+			if inst != nil && inst.Config != nil {
+				inst.Config["wg_port"] = val
+			}
+		}
 	case "stop":
 		playbooksChain = []string{playbookDown}
 	case "start":
