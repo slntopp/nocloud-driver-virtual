@@ -269,6 +269,11 @@ func VpnAction(
 	switch action.GetStringValue() {
 	case "create":
 		playbooksChain = []string{playbookUp}
+		if val, ok := data["wg_port"]; ok && val.GetStringValue() != "" {
+			if inst != nil && inst.Config != nil {
+				inst.Config["wg_port"] = val
+			}
+		}
 	case "stop":
 		playbooksChain = []string{playbookDown}
 	case "start":
@@ -348,6 +353,11 @@ func VpnAction(
 		return nil, err
 	}
 
+	var wgPort = "51820"
+	if _wgPort, ok := inst.Config["wg_port"]; ok && _wgPort.GetStringValue() != "" {
+		wgPort = _wgPort.GetStringValue()
+	}
+
 	ansibleInstance := &ansible.Instance{
 		Uuid: inst.GetUuid(),
 		Host: host,
@@ -397,6 +407,7 @@ func VpnAction(
 					"INSTANCE_TOKEN":       instToken,
 					"POST_STATE_URL":       path.Join(baseUrl, "edge/post_state"),
 					"POST_CONFIG_DATA_URL": path.Join(baseUrl, "edge/post_config_data"),
+					"wg_port":              wgPort,
 				},
 			},
 		})
