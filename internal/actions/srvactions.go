@@ -155,7 +155,7 @@ func FreeRenew(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.I
 
 	end := lastMonitoringValue + period
 	if pkind != billingpb.PeriodKind_DEFAULT {
-		end = utils.AlignPaymentDate(lastMonitoringValue, end, period)
+		end = utils.AlignPaymentDate(lastMonitoringValue, end, period, inst)
 	}
 	instData["last_monitoring"] = structpb.NewNumberValue(float64(end))
 
@@ -166,7 +166,7 @@ func FreeRenew(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb.I
 			lm := int64(lmValue.GetNumberValue())
 			end := lm + period
 			if pkind != billingpb.PeriodKind_DEFAULT {
-				end = utils.AlignPaymentDate(lm, end, period)
+				end = utils.AlignPaymentDate(lm, end, period, inst)
 			}
 			instData[key] = structpb.NewNumberValue(float64(end))
 		}
@@ -199,7 +199,7 @@ func CancelRenew(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb
 
 	period := billingPlan.GetProducts()[instProduct].GetPeriod()
 
-	lastMonitoringValue = utils.AlignPaymentDate(lastMonitoringValue, lastMonitoringValue-period, period)
+	lastMonitoringValue = utils.AlignPaymentDate(lastMonitoringValue, lastMonitoringValue-period, period, inst)
 	instData["last_monitoring"] = structpb.NewNumberValue(float64(lastMonitoringValue))
 
 	for _, addonId := range inst.Addons {
@@ -207,7 +207,7 @@ func CancelRenew(log *zap.Logger, sPub states.Pub, iPub instances.Pub, inst *ipb
 		lmValue, ok := instData[key]
 		if ok {
 			lm := int64(lmValue.GetNumberValue())
-			lm = utils.AlignPaymentDate(lm, lm-period, period)
+			lm = utils.AlignPaymentDate(lm, lm-period, period, inst)
 			instData[key] = structpb.NewNumberValue(float64(lm))
 		}
 	}
