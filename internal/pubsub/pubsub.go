@@ -75,7 +75,8 @@ func SetupEventsPublisher(logger *zap.Logger, rbmq *amqp.Connection) EventPublis
 			return
 		}
 		err = ch.PublishWithContext(context.Background(), "", qName, false, false, amqp.Publishing{
-			ContentType: "text/plain", Body: body,
+			DeliveryMode: amqp.Persistent,
+			ContentType:  "text/plain", Body: body,
 		})
 		if err != nil {
 			log.Warn("Couldn't publish records to the queue", zap.Error(err))
