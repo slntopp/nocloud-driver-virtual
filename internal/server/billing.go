@@ -281,7 +281,7 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 		now := time.Now().Unix()
 		lastMonitoringValue := int64(lastMonitoring.GetNumberValue())
 
-		suspendedManually := i.GetData()["suspended_manually"].GetBoolValue()
+		freeze := i.GetData()["freeze"].GetBoolValue()
 
 		if product.GetKind() == billing.Kind_POSTPAID {
 			if now > lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
@@ -300,7 +300,8 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 					})
 				}
 
-			} else if now <= lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !suspendedManually {
+			} else if now <= lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !freeze {
+				delete(i.Data, "suspended_manually")
 				go s.HandlePublishInstanceState(&statespb.ObjectState{
 					Uuid: i.GetUuid(),
 					State: &statespb.State{
@@ -339,7 +340,8 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 					})
 				}
 
-			} else if now <= lastMonitoringValue && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !suspendedManually {
+			} else if now <= lastMonitoringValue && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !freeze {
+				delete(i.Data, "suspended_manually")
 				go s.HandlePublishInstanceState(&statespb.ObjectState{
 					Uuid: i.GetUuid(),
 					State: &statespb.State{
