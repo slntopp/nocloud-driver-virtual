@@ -282,11 +282,15 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 		lastMonitoringValue := int64(lastMonitoring.GetNumberValue())
 
 		freeze := i.GetData()["freeze"].GetBoolValue()
+		_, hasSuspendTime := i.GetData()["suspend_time"]
+		suspendedManually := i.GetData()["suspended_manually"].GetBoolValue()
+		isBillingSuspend := hasSuspendTime || !suspendedManually
 
 		if product.GetKind() == billing.Kind_POSTPAID {
 			if now > lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
 
 				if suspend_rules.SuspendAllowed(sp.GetSuspendRules(), time.Now().UTC()) {
+					i.Data["suspend_time"] = structpb.NewNumberValue(float64(now))
 					go s.HandlePublishInstanceState(&statespb.ObjectState{
 						Uuid: i.GetUuid(),
 						State: &statespb.State{
@@ -300,7 +304,8 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 					})
 				}
 
-			} else if now <= lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !freeze {
+			} else if now <= lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !freeze && isBillingSuspend {
+				delete(i.Data, "suspend_time")
 				delete(i.Data, "suspended_manually")
 				go s.HandlePublishInstanceState(&statespb.ObjectState{
 					Uuid: i.GetUuid(),
@@ -327,6 +332,7 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 			if now > lastMonitoringValue && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
 
 				if suspend_rules.SuspendAllowed(sp.GetSuspendRules(), time.Now().UTC()) {
+					i.Data["suspend_time"] = structpb.NewNumberValue(float64(now))
 					go s.HandlePublishInstanceState(&statespb.ObjectState{
 						Uuid: i.GetUuid(),
 						State: &statespb.State{
@@ -340,7 +346,8 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 					})
 				}
 
-			} else if now <= lastMonitoringValue && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !freeze {
+			} else if now <= lastMonitoringValue && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !freeze && isBillingSuspend {
+				delete(i.Data, "suspend_time")
 				delete(i.Data, "suspended_manually")
 				go s.HandlePublishInstanceState(&statespb.ObjectState{
 					Uuid: i.GetUuid(),
