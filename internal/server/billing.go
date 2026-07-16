@@ -287,7 +287,11 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 		isBillingSuspend := hasSuspendTime || !suspendedManually
 
 		if product.GetKind() == billing.Kind_POSTPAID {
-			if now > lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
+			if now > lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !freeze {
+				if _, ok := i.GetData()["suspend_time"]; !ok {
+					i.Data["suspend_time"] = structpb.NewNumberValue(float64(now))
+				}
+			} else if now > lastMonitoringValue+product.GetPeriod() && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
 
 				if suspend_rules.SuspendAllowed(sp.GetSuspendRules(), time.Now().UTC()) {
 					i.Data["suspend_time"] = structpb.NewNumberValue(float64(now))
@@ -329,7 +333,11 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 
 			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(end))
 		} else {
-			if now > lastMonitoringValue && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
+			if now > lastMonitoringValue && i.GetState().GetState() == statespb.NoCloudState_SUSPENDED && !freeze {
+				if _, ok := i.GetData()["suspend_time"]; !ok {
+					i.Data["suspend_time"] = structpb.NewNumberValue(float64(now))
+				}
+			} else if now > lastMonitoringValue && i.GetState().GetState() != statespb.NoCloudState_SUSPENDED {
 
 				if suspend_rules.SuspendAllowed(sp.GetSuspendRules(), time.Now().UTC()) {
 					i.Data["suspend_time"] = structpb.NewNumberValue(float64(now))
