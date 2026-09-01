@@ -373,6 +373,17 @@ func (s *VirtualDriver) _handleNonRegularBilling(i *instances.Instance, addons m
 			i.Data["next_payment_date"] = structpb.NewNumberValue(float64(lastMonitoringValue))
 		}
 
+		due := lastMonitoringValue
+		if product.GetKind() == billing.Kind_POSTPAID {
+			due = lastMonitoringValue + product.GetPeriod()
+			if product.GetPeriodKind() != billing.PeriodKind_DEFAULT {
+				due = utils.AlignPaymentDate(lastMonitoringValue, due, product.GetPeriod(), i)
+			}
+		}
+		if shouldPublishOverdueTicket(now, due, i.Data) {
+			go s.HandlePublishEvent(overdueTicketEvent(i.GetUuid(), due))
+		}
+
 		s._handleEvent(i)
 		utils.SendActualMonitoringData(i.Data, i.Data, i.GetUuid(), s.HandlePublishInstanceData)
 	} else {
