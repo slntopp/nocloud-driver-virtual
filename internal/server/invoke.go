@@ -27,6 +27,10 @@ func (s *VirtualDriver) Invoke(ctx context.Context, req *pb.InvokeRequest) (*ipb
 		return nil, status.Errorf(codes.PermissionDenied, "Action %s is admin action", method)
 	}
 
+	if actions.AdminActions[method] && instance.GetAccess().GetLevel() < accesspb.Level_ROOT {
+		return nil, status.Errorf(codes.PermissionDenied, "Action %s is admin action", method)
+	}
+
 	action, ok := actions.SrvActions[method]
 	if ok {
 		return action(log, s.HandlePublishInstanceState, s.HandlePublishInstanceData, instance, req.GetParams())
