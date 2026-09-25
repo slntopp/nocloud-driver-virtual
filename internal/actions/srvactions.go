@@ -61,6 +61,16 @@ var BillingActions = map[string]ServiceAction{
 	"free_renew":   FreeRenew,
 }
 
+// AdminActions change billing or state without payment and are left to platform admins (ROOT),
+// as in the proxmox driver. manual_renew is paid and stays available to the instance owner.
+var AdminActions = map[string]bool{
+	"change_state": true,
+	"freeze":       true,
+	"unfreeze":     true,
+	"cancel_renew": true,
+	"free_renew":   true,
+}
+
 var AnsibleActions = map[string]AnsibleAction{
 	"vpn": VpnAction,
 }
