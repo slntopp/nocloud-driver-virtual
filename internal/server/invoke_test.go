@@ -28,7 +28,7 @@ func invokeAs(level accesspb.Level, method string) error {
 }
 
 func TestAdminActionsNeedRoot(t *testing.T) {
-	for method := range map[string]bool{"free_renew": true, "cancel_renew": true, "change_state": true, "freeze": true, "unfreeze": true} {
+	for method := range map[string]bool{"free_renew": true, "cancel_renew": true, "change_state": true, "freeze": true, "unfreeze": true, "change_ip": true} {
 		t.Run(method, func(t *testing.T) {
 			if code := status.Code(invokeAs(accesspb.Level_ADMIN, method)); code != codes.PermissionDenied {
 				t.Fatalf("owner with ADMIN: code = %v, want PermissionDenied", code)
