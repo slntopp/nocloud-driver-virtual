@@ -53,6 +53,7 @@ var SrvActions = map[string]ServiceAction{
 	"freeze":       Freeze,
 	"unfreeze":     Unfreeze,
 	"cancel_renew": CancelRenew,
+	"change_ip":    ChangeIP,
 }
 
 var BillingActions = map[string]ServiceAction{
@@ -61,7 +62,7 @@ var BillingActions = map[string]ServiceAction{
 	"free_renew":   FreeRenew,
 }
 
-// AdminActions change billing or state without payment and are left to platform admins (ROOT),
+// AdminActions change billing, state or IPs without payment and are left to platform admins (ROOT),
 // as in the proxmox driver. manual_renew is paid and stays available to the instance owner.
 var AdminActions = map[string]bool{
 	"change_state": true,
@@ -69,6 +70,7 @@ var AdminActions = map[string]bool{
 	"unfreeze":     true,
 	"cancel_renew": true,
 	"free_renew":   true,
+	"change_ip":    true,
 }
 
 var AnsibleActions = map[string]AnsibleAction{
